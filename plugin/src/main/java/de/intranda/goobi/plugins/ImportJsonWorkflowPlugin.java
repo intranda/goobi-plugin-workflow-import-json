@@ -39,10 +39,10 @@ import ugh.fileformats.mets.MetsMods;
 
 @PluginImplementation
 @Log4j2
-public class SampleWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
+public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
 
     @Getter
-    private String title = "intranda_workflow_sample";
+    private String title = "intranda_workflow_import_json";
     private long lastPush = System.currentTimeMillis();
     @Getter
     private List<ImportSet> importSets;
@@ -68,13 +68,13 @@ public class SampleWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
 
     @Override
     public String getGui() {
-        return "/uii/plugin_workflow_sample.xhtml";
+        return "/uii/plugin_workflow_import_json.xhtml";
     }
 
     /**
      * Constructor
      */
-    public SampleWorkflowPlugin() {
+    public ImportJsonWorkflowPlugin() {
         log.info("Sample importer workflow plugin started");
 
         // read important configuration first
