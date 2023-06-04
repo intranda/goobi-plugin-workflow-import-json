@@ -38,6 +38,7 @@ import ugh.dl.Fileformat;
 import ugh.dl.Metadata;
 import ugh.dl.Person;
 import ugh.dl.Prefs;
+import ugh.exceptions.IncompletePersonObjectException;
 import ugh.exceptions.MetadataTypeNotAllowedException;
 import ugh.exceptions.PreferencesException;
 import ugh.exceptions.TypeNotAllowedForParentException;
@@ -155,13 +156,12 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                     updateLog("Start importing: " + processName, 1);
 
                     // create and save the process
-                    try {
-                        tryCreateAndSaveNewProcess(bhelp, processName);
-
-                    } catch (Exception e) {
-                        log.error("Error while creating a process during the import", e);
-                        updateLog("Error while creating a process during the import: " + e.getMessage(), 3);
-                        Helper.setFehlerMeldung("Error while creating a process during the import: " + e.getMessage());
+                    boolean success = tryCreateAndSaveNewProcess(bhelp, processName);
+                    if (!success) {
+                        String message = "Error while creating a process during the import";
+                        log.error(message);
+                        updateLog(message);
+                        Helper.setFehlerMeldung(message);
                         pusher.send("error");
                     }
 
@@ -231,30 +231,132 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         return processName;
     }
     
-    private void tryCreateAndSaveNewProcess(BeanHelper bhelp, String processName)
-            throws PreferencesException, TypeNotAllowedForParentException, MetadataTypeNotAllowedException, DAOException, IOException, SwapException {
+    private boolean tryCreateAndSaveNewProcess(BeanHelper bhelp, String processName) {
         // get the correct workflow to use
         Process template = ProcessManager.getProcessByExactTitle(workflow);
         // prepare the Fileformat based on the template Process
         Fileformat fileformat = prepareFileformatForNewProcess(template);
+        if (fileformat == null) {
+            // error happened during the preparation
+            return false;
+        }
 
+        // save the process
+        Process process = createAndSaveNewProcess(bhelp, template, processName, fileformat);
+        if (process == null) {
+            // error heppened while saving
+            return false;
+        }
+
+        // copy files into the media folder of the process
+        try {
+            copyMediaFiles(process);
+        } catch (IOException | SwapException | DAOException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+            String message = "Error while trying to copy files into the media folder: " + e.getMessage();
+            log.error(message);
+            updateLog(message, 3);
+            Helper.setFehlerMeldung(message);
+            pusher.send("error");
+            return false;
+        }
+
+        // start open automatic tasks
+        startOpenAutomaticTasks(process);
+
+        updateLog("Process successfully created with ID: " + process.getId());
+
+        return true;
+    }
+
+    private Fileformat prepareFileformatForNewProcess(Process template) {
+        Prefs prefs = template.getRegelsatz().getPreferences();
+        try {
+            Fileformat fileformat = new MetsMods(prefs);
+            DigitalDocument dd = new DigitalDocument();
+            fileformat.setDigitalDocument(dd);
+
+            // add the physical basics
+            DocStruct physical = dd.createDocStruct(prefs.getDocStrctTypeByName("BoundBook"));
+            dd.setPhysicalDocStruct(physical);
+            Metadata mdForPath = new Metadata(prefs.getMetadataTypeByName("pathimagefiles"));
+            mdForPath.setValue("file:///");
+            physical.addMetadata(mdForPath);
+
+            // add the logical basics
+            DocStruct logical = dd.createDocStruct(prefs.getDocStrctTypeByName(publicationType));
+            dd.setLogicalDocStruct(logical);
+
+            // create the metadata fields by reading the config (and get content from the content files of course)
+            for (ImportSet importSet : importSets) {
+                // treat persons different than regular metadata
+                if (importSet.isPerson()) {
+                    updateLog("Add person '" + importSet.getTarget() + "' with value '" + importSet.getSource() + "'");
+                    Person p = new Person(prefs.getMetadataTypeByName(importSet.getTarget()));
+                    String firstname = importSet.getSource().substring(0, importSet.getSource().indexOf(" "));
+                    String lastname = importSet.getSource().substring(importSet.getSource().indexOf(" "));
+                    p.setFirstname(firstname);
+                    p.setLastname(lastname);
+                    logical.addPerson(p);
+                } else {
+                    updateLog("Add metadata '" + importSet.getTarget() + "' with value '" + importSet.getSource() + "'");
+                    Metadata mdTitle = new Metadata(prefs.getMetadataTypeByName(importSet.getTarget()));
+                    mdTitle.setValue(importSet.getSource());
+                    logical.addMetadata(mdTitle);
+                }
+            }
+
+            return fileformat;
+
+        } catch (PreferencesException | TypeNotAllowedForParentException | MetadataTypeNotAllowedException | IncompletePersonObjectException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+            String message = "Error while preparing the Fileformat for the new process: " + e.getMessage();
+            log.error(message);
+            updateLog(message, 3);
+            Helper.setFehlerMeldung(message);
+            pusher.send("error");
+            return null;
+        }
+    }
+
+    private Process createAndSaveNewProcess(BeanHelper bhelp, Process template, String processName, Fileformat fileformat) {
         // save the process
         Process process = bhelp.createAndSaveNewProcess(template, processName, fileformat);
 
         // add some properties
         bhelp.EigenschaftHinzufuegen(process, "Template", template.getTitel());
         bhelp.EigenschaftHinzufuegen(process, "TemplateID", "" + template.getId());
-        ProcessManager.saveProcess(process);
 
+        try {
+            ProcessManager.saveProcess(process);
+        } catch (DAOException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+            String message = "Error while trying to save the process: " + e.getMessage();
+            log.error(message);
+            updateLog(message, 3);
+            Helper.setFehlerMeldung(message);
+            pusher.send("error");
+            return null;
+        }
+
+        return process;
+    }
+
+    private void copyMediaFiles(Process process) throws IOException, SwapException, DAOException {
         // if media files are given, import these into the media folder of the process
         updateLog("Start copying media files");
         String targetBase = process.getImagesOrigDirectory(false);
-        File pdf = new File(importFolder, "file.jpg");
-        if (pdf.canRead()) {
+        File file = new File(importFolder, "file.jpg");
+        if (file.canRead()) {
             StorageProvider.getInstance().createDirectories(Paths.get(targetBase));
-            StorageProvider.getInstance().copyFile(Paths.get(pdf.getAbsolutePath()), Paths.get(targetBase, "file.jpg"));
+            StorageProvider.getInstance().copyFile(Paths.get(file.getAbsolutePath()), Paths.get(targetBase, "file.jpg"));
         }
+    }
 
+    private void startOpenAutomaticTasks(Process process) {
         // start any open automatic tasks for the created process
         for (Step s : process.getSchritteList()) {
             if (s.getBearbeitungsstatusEnum().equals(StepStatus.OPEN) && s.isTypAutomatisch()) {
@@ -262,47 +364,6 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 myThread.startOrPutToQueue();
             }
         }
-        updateLog("Process successfully created with ID: " + process.getId());
-    }
-
-    private Fileformat prepareFileformatForNewProcess(Process template)
-            throws PreferencesException, TypeNotAllowedForParentException, MetadataTypeNotAllowedException {
-        Prefs prefs = template.getRegelsatz().getPreferences();
-        Fileformat fileformat = new MetsMods(prefs);
-        DigitalDocument dd = new DigitalDocument();
-        fileformat.setDigitalDocument(dd);
-
-        // add the physical basics
-        DocStruct physical = dd.createDocStruct(prefs.getDocStrctTypeByName("BoundBook"));
-        dd.setPhysicalDocStruct(physical);
-        Metadata mdForPath = new Metadata(prefs.getMetadataTypeByName("pathimagefiles"));
-        mdForPath.setValue("file:///");
-        physical.addMetadata(mdForPath);
-
-        // add the logical basics
-        DocStruct logical = dd.createDocStruct(prefs.getDocStrctTypeByName(publicationType));
-        dd.setLogicalDocStruct(logical);
-
-        // create the metadata fields by reading the config (and get content from the content files of course)
-        for (ImportSet importSet : importSets) {
-            // treat persons different than regular metadata
-            if (importSet.isPerson()) {
-                updateLog("Add person '" + importSet.getTarget() + "' with value '" + importSet.getSource() + "'");
-                Person p = new Person(prefs.getMetadataTypeByName(importSet.getTarget()));
-                String firstname = importSet.getSource().substring(0, importSet.getSource().indexOf(" "));
-                String lastname = importSet.getSource().substring(importSet.getSource().indexOf(" "));
-                p.setFirstname(firstname);
-                p.setLastname(lastname);
-                logical.addPerson(p);
-            } else {
-                updateLog("Add metadata '" + importSet.getTarget() + "' with value '" + importSet.getSource() + "'");
-                Metadata mdTitle = new Metadata(prefs.getMetadataTypeByName(importSet.getTarget()));
-                mdTitle.setValue(importSet.getSource());
-                logical.addMetadata(mdTitle);
-            }
-        }
-
-        return fileformat;
     }
 
     @Data
