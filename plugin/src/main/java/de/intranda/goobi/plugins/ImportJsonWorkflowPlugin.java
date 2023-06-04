@@ -56,7 +56,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     @Getter
     int itemsTotal = 0;
     @Getter
-    private Queue<LogMessage> logQueue = new CircularFifoQueue<LogMessage>(48);
+    private Queue<LogMessage> logQueue = new CircularFifoQueue<>(48);
     private String importFolder;
     private String workflow;
     private String publicationType;
@@ -93,7 +93,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         publicationType = ConfigPlugins.getPluginConfig(title).getString("publicationType");
         
         // read list of mapping configuration
-        importSets = new ArrayList<ImportSet>();
+        importSets = new ArrayList<>();
         List<HierarchicalConfiguration> mappings = ConfigPlugins.getPluginConfig(title).configurationsAt("importSet");
         for (HierarchicalConfiguration node : mappings) {
             String settitle = node.getString("[@title]", "-");
@@ -132,7 +132,8 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             try {
             	updateLog("Run through all import files");
                 int start = 0;
-                int end = 20;
+                //                int end = 20;
+                int end = 1;
                 itemsTotal = end - start;
                 itemCurrent = start;
                 
@@ -143,21 +144,9 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         break;
                     }
 
-                    // create a process name (here as UUID) and make sure it does not exist yet
-                    String processname = UUID.randomUUID().toString();  
-                    String regex = ConfigurationHelper.getInstance().getProcessTitleReplacementRegex();
-                    processname = processname.replaceAll(regex, "_").trim();   
-                    
-                    if (ProcessManager.countProcessTitle(processname, null) > 0) {
-                        int tempCounter = 1;
-                        String tempName = processname + "_" + tempCounter;
-                        while(ProcessManager.countProcessTitle(tempName, null) > 0) {
-                            tempCounter++;
-                            tempName = processname + "_" + tempCounter;
-                        }
-                        processname = tempName;
-                    }
-                	updateLog("Start importing: " + processname, 1);
+                    // create a unique process name
+                    String processName = createProcessName();
+                    updateLog("Start importing: " + processName, 1);
 
                     try {
                         // get the correct workflow to use
@@ -198,7 +187,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         }
 
                         // save the process
-                        Process process = bhelp.createAndSaveNewProcess(template, processname, fileformat);
+                        Process process = bhelp.createAndSaveNewProcess(template, processName, fileformat);
 
                         // add some properties
                         bhelp.EigenschaftHinzufuegen(process, "Template", template.getTitel());
@@ -208,10 +197,10 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         // if media files are given, import these into the media folder of the process
                         updateLog("Start copying media files");
                         String targetBase = process.getImagesOrigDirectory(false);
-                        File pdf = new File(importFolder, "file.pdf");
+                        File pdf = new File(importFolder, "file.jpg");
                         if (pdf.canRead()) {
                             StorageProvider.getInstance().createDirectories(Paths.get(targetBase));
-                            StorageProvider.getInstance().copyFile(Paths.get(pdf.getAbsolutePath()), Paths.get(targetBase, "file.pdf"));
+                            StorageProvider.getInstance().copyFile(Paths.get(pdf.getAbsolutePath()), Paths.get(targetBase, "file.jpg"));
                         }
 
                         // start any open automatic tasks for the created process
@@ -276,6 +265,26 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         }
 	}
 	
+    private String createProcessName() {
+        // create a process name via UUID
+        String processName = UUID.randomUUID().toString();
+        String regex = ConfigurationHelper.getInstance().getProcessTitleReplacementRegex();
+        processName = processName.replaceAll(regex, "_").trim();
+
+        // assure the uniqueness of the process name
+        if (ProcessManager.countProcessTitle(processName, null) > 0) {
+            int tempCounter = 1;
+            String tempName = processName + "_" + tempCounter;
+            while (ProcessManager.countProcessTitle(tempName, null) > 0) {
+                tempCounter++;
+                tempName = processName + "_" + tempCounter;
+            }
+            processName = tempName;
+        }
+
+        return processName;
+    }
+
     @Data
     @AllArgsConstructor
     public class ImportSet {
