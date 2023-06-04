@@ -55,16 +55,19 @@
     							</h3>
     						</div>
     						<div class="box-content">
+    							<!-- 
     							<h:panelGroup
     								rendered="#{!LoginForm.hasRole('Plugin_workflow_import_json')}">
     								<h:outputText
     									styleClass="alert alert-danger alert-dismissable margin-bottom-10 margin-top-10"
     									value="#{msgs.plugin_administration_missingPermission} Plugin_workflow_import_json"/>
     							</h:panelGroup>
-    
+    							-->
+    							<!-- 
     							<h:panelGroup id="actionform" styleClass="col-sm-12"
     								rendered="#{LoginForm.hasRole('Plugin_workflow_import_json')}">
-    								
+    							-->
+    							<h:panelGroup id="actionform" styleClass="col-sm-12">
 <!--                                     <h:outputText -->
 <!--                                         styleClass="alert alert-warning alert-dismissable margin-bottom-10 margin-top-10" -->
 <!--                                         value="#{msgs.plugin_intranda_workflow_sample_introduction}: #{NavigationForm.workflowPlugin.importFolder}"/> -->
@@ -133,7 +136,10 @@
 
         <!-- log view -->
         <h:panelGroup id="logs">
+        	<!-- 
             <h:panelGroup styleClass="logs" rendered="#{LoginForm.hasRole('Plugin_workflow_import_json')}">
+            -->
+            <h:panelGroup styleClass="logs">
                 <ui:repeat
                     var="log"
                     value="#{NavigationForm.workflowPlugin.logQueue}">
