@@ -159,10 +159,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                     boolean success = tryCreateAndSaveNewProcess(bhelp, processName);
                     if (!success) {
                         String message = "Error while creating a process during the import";
-                        log.error(message);
-                        updateLog(message);
-                        Helper.setFehlerMeldung(message);
-                        pusher.send("error");
+                        reportError(message);
                     }
 
                     // recalculate progress
@@ -252,13 +249,8 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         try {
             copyMediaFiles(process);
         } catch (IOException | SwapException | DAOException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
             String message = "Error while trying to copy files into the media folder: " + e.getMessage();
-            log.error(message);
-            updateLog(message, 3);
-            Helper.setFehlerMeldung(message);
-            pusher.send("error");
+            reportError(message);
             return false;
         }
 
@@ -310,13 +302,8 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             return fileformat;
 
         } catch (PreferencesException | TypeNotAllowedForParentException | MetadataTypeNotAllowedException | IncompletePersonObjectException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
             String message = "Error while preparing the Fileformat for the new process: " + e.getMessage();
-            log.error(message);
-            updateLog(message, 3);
-            Helper.setFehlerMeldung(message);
-            pusher.send("error");
+            reportError(message);
             return null;
         }
     }
@@ -332,13 +319,8 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         try {
             ProcessManager.saveProcess(process);
         } catch (DAOException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
             String message = "Error while trying to save the process: " + e.getMessage();
-            log.error(message);
-            updateLog(message, 3);
-            Helper.setFehlerMeldung(message);
-            pusher.send("error");
+            reportError(message);
             return null;
         }
 
@@ -364,6 +346,13 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 myThread.startOrPutToQueue();
             }
         }
+    }
+
+    private void reportError(String message) {
+        log.error(message);
+        updateLog(message, 3);
+        Helper.setFehlerMeldung(message);
+        pusher.send("error");
     }
 
     @Data
