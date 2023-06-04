@@ -235,6 +235,38 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             throws PreferencesException, TypeNotAllowedForParentException, MetadataTypeNotAllowedException, DAOException, IOException, SwapException {
         // get the correct workflow to use
         Process template = ProcessManager.getProcessByExactTitle(workflow);
+        // prepare the Fileformat based on the template Process
+        Fileformat fileformat = prepareFileformatForNewProcess(template);
+
+        // save the process
+        Process process = bhelp.createAndSaveNewProcess(template, processName, fileformat);
+
+        // add some properties
+        bhelp.EigenschaftHinzufuegen(process, "Template", template.getTitel());
+        bhelp.EigenschaftHinzufuegen(process, "TemplateID", "" + template.getId());
+        ProcessManager.saveProcess(process);
+
+        // if media files are given, import these into the media folder of the process
+        updateLog("Start copying media files");
+        String targetBase = process.getImagesOrigDirectory(false);
+        File pdf = new File(importFolder, "file.jpg");
+        if (pdf.canRead()) {
+            StorageProvider.getInstance().createDirectories(Paths.get(targetBase));
+            StorageProvider.getInstance().copyFile(Paths.get(pdf.getAbsolutePath()), Paths.get(targetBase, "file.jpg"));
+        }
+
+        // start any open automatic tasks for the created process
+        for (Step s : process.getSchritteList()) {
+            if (s.getBearbeitungsstatusEnum().equals(StepStatus.OPEN) && s.isTypAutomatisch()) {
+                ScriptThreadWithoutHibernate myThread = new ScriptThreadWithoutHibernate(s);
+                myThread.startOrPutToQueue();
+            }
+        }
+        updateLog("Process successfully created with ID: " + process.getId());
+    }
+
+    private Fileformat prepareFileformatForNewProcess(Process template)
+            throws PreferencesException, TypeNotAllowedForParentException, MetadataTypeNotAllowedException {
         Prefs prefs = template.getRegelsatz().getPreferences();
         Fileformat fileformat = new MetsMods(prefs);
         DigitalDocument dd = new DigitalDocument();
@@ -270,32 +302,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             }
         }
 
-        // save the process
-        Process process = bhelp.createAndSaveNewProcess(template, processName, fileformat);
-
-        // add some properties
-        bhelp.EigenschaftHinzufuegen(process, "Template", template.getTitel());
-        bhelp.EigenschaftHinzufuegen(process, "TemplateID", "" + template.getId());
-        ProcessManager.saveProcess(process);
-
-        // if media files are given, import these into the media folder of the process
-        updateLog("Start copying media files");
-        String targetBase = process.getImagesOrigDirectory(false);
-        File pdf = new File(importFolder, "file.jpg");
-        if (pdf.canRead()) {
-            StorageProvider.getInstance().createDirectories(Paths.get(targetBase));
-            StorageProvider.getInstance().copyFile(Paths.get(pdf.getAbsolutePath()), Paths.get(targetBase, "file.jpg"));
-        }
-
-        // start any open automatic tasks for the created process
-        for (Step s : process.getSchritteList()) {
-            if (s.getBearbeitungsstatusEnum().equals(StepStatus.OPEN) && s.isTypAutomatisch()) {
-                ScriptThreadWithoutHibernate myThread = new ScriptThreadWithoutHibernate(s);
-                myThread.startOrPutToQueue();
-            }
-        }
-        updateLog("Process successfully created with ID: " + process.getId());
-
+        return fileformat;
     }
 
     @Data
