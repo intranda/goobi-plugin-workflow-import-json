@@ -1,6 +1,7 @@
 package de.intranda.goobi.plugins;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
@@ -23,6 +24,8 @@ import de.sub.goobi.helper.Helper;
 import de.sub.goobi.helper.ScriptThreadWithoutHibernate;
 import de.sub.goobi.helper.StorageProvider;
 import de.sub.goobi.helper.enums.StepStatus;
+import de.sub.goobi.helper.exceptions.DAOException;
+import de.sub.goobi.helper.exceptions.SwapException;
 import de.sub.goobi.persistence.managers.ProcessManager;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -35,6 +38,9 @@ import ugh.dl.Fileformat;
 import ugh.dl.Metadata;
 import ugh.dl.Person;
 import ugh.dl.Prefs;
+import ugh.exceptions.MetadataTypeNotAllowedException;
+import ugh.exceptions.PreferencesException;
+import ugh.exceptions.TypeNotAllowedForParentException;
 import ugh.fileformats.mets.MetsMods;
 
 @PluginImplementation
@@ -148,69 +154,9 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                     String processName = createProcessName();
                     updateLog("Start importing: " + processName, 1);
 
+                    // create and save the process
                     try {
-                        // get the correct workflow to use
-                        Process template = ProcessManager.getProcessByExactTitle(workflow);
-                        Prefs prefs = template.getRegelsatz().getPreferences();
-                        Fileformat fileformat = new MetsMods(prefs);
-                        DigitalDocument dd = new DigitalDocument();
-                        fileformat.setDigitalDocument(dd);
-
-                        // add the physical basics
-                        DocStruct physical = dd.createDocStruct(prefs.getDocStrctTypeByName("BoundBook"));
-                        dd.setPhysicalDocStruct(physical);
-                        Metadata mdForPath = new Metadata(prefs.getMetadataTypeByName("pathimagefiles"));
-                        mdForPath.setValue("file:///");
-                        physical.addMetadata(mdForPath);
-
-                        // add the logical basics
-                        DocStruct logical = dd.createDocStruct(prefs.getDocStrctTypeByName(publicationType));
-                        dd.setLogicalDocStruct(logical);
-
-                        // create the metadata fields by reading the config (and get content from the content files of course)
-                        for (ImportSet importSet : importSets) {
-                            // treat persons different than regular metadata
-                            if (importSet.isPerson()) {
-                            	updateLog("Add person '" + importSet.getTarget() + "' with value '" + importSet.getSource() + "'");
-                                Person p = new Person(prefs.getMetadataTypeByName(importSet.getTarget()));
-                                String firstname = importSet.getSource().substring(0, importSet.getSource().indexOf(" "));
-                                String lastname = importSet.getSource().substring(importSet.getSource().indexOf(" "));
-                                p.setFirstname(firstname);
-                                p.setLastname(lastname);
-                                logical.addPerson(p);       
-                            } else {
-                            	updateLog("Add metadata '" + importSet.getTarget() + "' with value '" + importSet.getSource() + "'");
-                                Metadata mdTitle = new Metadata(prefs.getMetadataTypeByName(importSet.getTarget()));
-                                mdTitle.setValue(importSet.getSource());
-                                logical.addMetadata(mdTitle);
-                            }
-                        }
-
-                        // save the process
-                        Process process = bhelp.createAndSaveNewProcess(template, processName, fileformat);
-
-                        // add some properties
-                        bhelp.EigenschaftHinzufuegen(process, "Template", template.getTitel());
-                        bhelp.EigenschaftHinzufuegen(process, "TemplateID", "" + template.getId());
-                        ProcessManager.saveProcess(process);
-                        
-                        // if media files are given, import these into the media folder of the process
-                        updateLog("Start copying media files");
-                        String targetBase = process.getImagesOrigDirectory(false);
-                        File pdf = new File(importFolder, "file.jpg");
-                        if (pdf.canRead()) {
-                            StorageProvider.getInstance().createDirectories(Paths.get(targetBase));
-                            StorageProvider.getInstance().copyFile(Paths.get(pdf.getAbsolutePath()), Paths.get(targetBase, "file.jpg"));
-                        }
-
-                        // start any open automatic tasks for the created process
-                        for (Step s : process.getSchritteList()) {
-                            if (s.getBearbeitungsstatusEnum().equals(StepStatus.OPEN) && s.isTypAutomatisch()) {
-                                ScriptThreadWithoutHibernate myThread = new ScriptThreadWithoutHibernate(s);
-                                myThread.startOrPutToQueue();
-                            }
-                        }
-                        updateLog("Process successfully created with ID: " + process.getId());
+                        tryCreateAndSaveNewProcess(bhelp, processName);
 
                     } catch (Exception e) {
                         log.error("Error while creating a process during the import", e);
@@ -283,6 +229,73 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         }
 
         return processName;
+    }
+    
+    private void tryCreateAndSaveNewProcess(BeanHelper bhelp, String processName)
+            throws PreferencesException, TypeNotAllowedForParentException, MetadataTypeNotAllowedException, DAOException, IOException, SwapException {
+        // get the correct workflow to use
+        Process template = ProcessManager.getProcessByExactTitle(workflow);
+        Prefs prefs = template.getRegelsatz().getPreferences();
+        Fileformat fileformat = new MetsMods(prefs);
+        DigitalDocument dd = new DigitalDocument();
+        fileformat.setDigitalDocument(dd);
+
+        // add the physical basics
+        DocStruct physical = dd.createDocStruct(prefs.getDocStrctTypeByName("BoundBook"));
+        dd.setPhysicalDocStruct(physical);
+        Metadata mdForPath = new Metadata(prefs.getMetadataTypeByName("pathimagefiles"));
+        mdForPath.setValue("file:///");
+        physical.addMetadata(mdForPath);
+
+        // add the logical basics
+        DocStruct logical = dd.createDocStruct(prefs.getDocStrctTypeByName(publicationType));
+        dd.setLogicalDocStruct(logical);
+
+        // create the metadata fields by reading the config (and get content from the content files of course)
+        for (ImportSet importSet : importSets) {
+            // treat persons different than regular metadata
+            if (importSet.isPerson()) {
+                updateLog("Add person '" + importSet.getTarget() + "' with value '" + importSet.getSource() + "'");
+                Person p = new Person(prefs.getMetadataTypeByName(importSet.getTarget()));
+                String firstname = importSet.getSource().substring(0, importSet.getSource().indexOf(" "));
+                String lastname = importSet.getSource().substring(importSet.getSource().indexOf(" "));
+                p.setFirstname(firstname);
+                p.setLastname(lastname);
+                logical.addPerson(p);
+            } else {
+                updateLog("Add metadata '" + importSet.getTarget() + "' with value '" + importSet.getSource() + "'");
+                Metadata mdTitle = new Metadata(prefs.getMetadataTypeByName(importSet.getTarget()));
+                mdTitle.setValue(importSet.getSource());
+                logical.addMetadata(mdTitle);
+            }
+        }
+
+        // save the process
+        Process process = bhelp.createAndSaveNewProcess(template, processName, fileformat);
+
+        // add some properties
+        bhelp.EigenschaftHinzufuegen(process, "Template", template.getTitel());
+        bhelp.EigenschaftHinzufuegen(process, "TemplateID", "" + template.getId());
+        ProcessManager.saveProcess(process);
+
+        // if media files are given, import these into the media folder of the process
+        updateLog("Start copying media files");
+        String targetBase = process.getImagesOrigDirectory(false);
+        File pdf = new File(importFolder, "file.jpg");
+        if (pdf.canRead()) {
+            StorageProvider.getInstance().createDirectories(Paths.get(targetBase));
+            StorageProvider.getInstance().copyFile(Paths.get(pdf.getAbsolutePath()), Paths.get(targetBase, "file.jpg"));
+        }
+
+        // start any open automatic tasks for the created process
+        for (Step s : process.getSchritteList()) {
+            if (s.getBearbeitungsstatusEnum().equals(StepStatus.OPEN) && s.isTypAutomatisch()) {
+                ScriptThreadWithoutHibernate myThread = new ScriptThreadWithoutHibernate(s);
+                myThread.startOrPutToQueue();
+            }
+        }
+        updateLog("Process successfully created with ID: " + process.getId());
+
     }
 
     @Data
