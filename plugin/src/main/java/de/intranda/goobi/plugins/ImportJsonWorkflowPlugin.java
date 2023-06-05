@@ -18,6 +18,7 @@ import org.goobi.beans.Step;
 import org.goobi.production.enums.PluginType;
 import org.goobi.production.plugin.interfaces.IPushPlugin;
 import org.goobi.production.plugin.interfaces.IWorkflowPlugin;
+import org.json.JSONArray;
 import org.json.JSONObject;
 import org.omnifaces.cdi.PushContext;
 
@@ -372,34 +373,38 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         for (ImportSet importSet : importSets) {
             // retrieve the value from the configured jsonPath
             String source = importSet.getSource();
-            String value = getValueFromSource(source, jsonObject);
+            List<String> values = getValueFromSource(source, jsonObject);
             // prepare the MetadataType
             String target = importSet.getTarget();
             MetadataType targetType = prefs.getMetadataTypeByName(target);
 
-            // treat persons different than regular metadata
-            if (importSet.isPerson()) {
-                updateLog("Add person '" + target + "' with value '" + value + "'");
-                Person p = new Person(targetType);
-                String firstname = value.substring(0, value.indexOf(" "));
-                String lastname = value.substring(value.indexOf(" "));
-                p.setFirstname(firstname);
-                p.setLastname(lastname);
-                ds.addPerson(p);
-            } else {
-                updateLog("Add metadata '" + target + "' with value '" + value + "'");
-                Metadata md = new Metadata(targetType);
-                md.setValue(value);
-                ds.addMetadata(md);
+            for (String value : values) {
+                // treat persons different than regular metadata
+                if (importSet.isPerson()) {
+                    updateLog("Add person '" + target + "' with value '" + value + "'");
+                    Person p = new Person(targetType);
+                    String firstname = value.substring(0, value.indexOf(" "));
+                    String lastname = value.substring(value.indexOf(" "));
+                    p.setFirstname(firstname);
+                    p.setLastname(lastname);
+                    ds.addPerson(p);
+                } else {
+                    updateLog("Add metadata '" + target + "' with value '" + value + "'");
+                    Metadata md = new Metadata(targetType);
+                    md.setValue(value);
+                    ds.addMetadata(md);
+                }
             }
         }
     }
 
-    private String getValueFromSource(String source, JSONObject jsonObject) {
+    private List<String> getValueFromSource(String source, JSONObject jsonObject) {
+        List<String> results = new ArrayList<>();
         // for elements other than arrays, jsonPath should start with $.
         if (!source.startsWith("$")) {
             // for those that are not json paths, just return themselves trimmed
-            return source.trim();
+            results.add(source.trim());
+            return results;
         }
 
         // split jsonPath
@@ -411,9 +416,22 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             String pathPart = pathArray[i];
             tempObject = tempObject.getJSONObject(pathPart);
         }
-        String key = pathArray[pathArray.length - 1];
 
-        return tempObject.getString(key);
+        // the leaf element of the path is the key
+        String key = pathArray[pathArray.length - 1];
+        if (!key.endsWith("[:]")) {
+            results.add(tempObject.getString(key));
+        } else {
+            // the value is an array
+            key = key.substring(0, key.length() - 3);
+            JSONArray jsonArray = tempObject.getJSONArray(key);
+            for (int i = 0; i < jsonArray.length(); ++i) {
+                String value = jsonArray.getString(i);
+                results.add(value);
+            }
+        }
+
+        return results;
     }
 
     private void reportError(String message) {
