@@ -396,19 +396,18 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     }
 
     private String getValueFromSource(String source, JSONObject jsonObject) {
-        // for elements other than arrays, jsonPath should start with $
+        // for elements other than arrays, jsonPath should start with $.
         if (!source.startsWith("$")) {
             // for those that are not json paths, just return themselves trimmed
             return source.trim();
         }
 
-        // remove the heading $
-        String jsonPath = source.substring(1);
         // split jsonPath
-        String[] pathArray = jsonPath.split("\\.");
+        String[] pathArray = source.split("\\.");
         // iterate over pathArray to get the json object
         JSONObject tempObject = jsonObject;
-        for (int i = 0; i < pathArray.length - 1; ++i) {
+        // skip the first item since it is nothign but a $
+        for (int i = 1; i < pathArray.length - 1; ++i) {
             String pathPart = pathArray[i];
             tempObject = tempObject.getJSONObject(pathPart);
         }
