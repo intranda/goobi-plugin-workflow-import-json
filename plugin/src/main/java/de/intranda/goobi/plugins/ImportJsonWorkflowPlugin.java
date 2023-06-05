@@ -2,6 +2,7 @@ package de.intranda.goobi.plugins;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
@@ -23,6 +24,7 @@ import de.sub.goobi.helper.BeanHelper;
 import de.sub.goobi.helper.Helper;
 import de.sub.goobi.helper.ScriptThreadWithoutHibernate;
 import de.sub.goobi.helper.StorageProvider;
+import de.sub.goobi.helper.StorageProviderInterface;
 import de.sub.goobi.helper.enums.StepStatus;
 import de.sub.goobi.helper.exceptions.DAOException;
 import de.sub.goobi.helper.exceptions.SwapException;
@@ -36,6 +38,7 @@ import ugh.dl.DigitalDocument;
 import ugh.dl.DocStruct;
 import ugh.dl.Fileformat;
 import ugh.dl.Metadata;
+import ugh.dl.MetadataType;
 import ugh.dl.Person;
 import ugh.dl.Prefs;
 import ugh.exceptions.IncompletePersonObjectException;
@@ -68,6 +71,10 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     private String workflow;
     private String publicationType;
     
+    private String jsonFolder;
+
+    private StorageProviderInterface storageProvider = StorageProvider.getInstance();
+
     @Override
     public PluginType getType() {
         return PluginType.Workflow;
@@ -98,6 +105,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         importFolder = ConfigPlugins.getPluginConfig(title).getString("importFolder");
         workflow = ConfigPlugins.getPluginConfig(title).getString("workflow");
         publicationType = ConfigPlugins.getPluginConfig(title).getString("publicationType");
+        jsonFolder = ConfigPlugins.getPluginConfig(title).getString("jsonFolder");
         
         // read list of mapping configuration
         importSets = new ArrayList<>();
@@ -139,13 +147,15 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             try {
             	updateLog("Run through all import files");
                 int start = 0;
-                //                int end = 20;
-                int end = 1;
+
+                List<Path> jsonFiles = storageProvider.listFiles(jsonFolder);
+                int end = jsonFiles.size();
+
                 itemsTotal = end - start;
                 itemCurrent = start;
                 
                 // run through import files (e.g. from importFolder)
-                for (int i = start; i < end; i++) {
+                for (Path jsonFile : jsonFiles) {
                     Thread.sleep(100);
                     if (!run) {
                         break;
@@ -156,7 +166,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                     updateLog("Start importing: " + processName, 1);
 
                     // create and save the process
-                    boolean success = tryCreateAndSaveNewProcess(bhelp, processName);
+                    boolean success = tryCreateAndSaveNewProcess(bhelp, processName, jsonFile);
                     if (!success) {
                         String message = "Error while creating a process during the import";
                         reportError(message);
@@ -228,11 +238,11 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         return processName;
     }
     
-    private boolean tryCreateAndSaveNewProcess(BeanHelper bhelp, String processName) {
+    private boolean tryCreateAndSaveNewProcess(BeanHelper bhelp, String processName, Path jsonFile) {
         // get the correct workflow to use
         Process template = ProcessManager.getProcessByExactTitle(workflow);
         // prepare the Fileformat based on the template Process
-        Fileformat fileformat = prepareFileformatForNewProcess(template);
+        Fileformat fileformat = prepareFileformatForNewProcess(template, jsonFile);
         if (fileformat == null) {
             // error happened during the preparation
             return false;
@@ -262,7 +272,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         return true;
     }
 
-    private Fileformat prepareFileformatForNewProcess(Process template) {
+    private Fileformat prepareFileformatForNewProcess(Process template, Path jsonFile) {
         Prefs prefs = template.getRegelsatz().getPreferences();
         try {
             Fileformat fileformat = new MetsMods(prefs);
@@ -281,23 +291,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             dd.setLogicalDocStruct(logical);
 
             // create the metadata fields by reading the config (and get content from the content files of course)
-            for (ImportSet importSet : importSets) {
-                // treat persons different than regular metadata
-                if (importSet.isPerson()) {
-                    updateLog("Add person '" + importSet.getTarget() + "' with value '" + importSet.getSource() + "'");
-                    Person p = new Person(prefs.getMetadataTypeByName(importSet.getTarget()));
-                    String firstname = importSet.getSource().substring(0, importSet.getSource().indexOf(" "));
-                    String lastname = importSet.getSource().substring(importSet.getSource().indexOf(" "));
-                    p.setFirstname(firstname);
-                    p.setLastname(lastname);
-                    logical.addPerson(p);
-                } else {
-                    updateLog("Add metadata '" + importSet.getTarget() + "' with value '" + importSet.getSource() + "'");
-                    Metadata mdTitle = new Metadata(prefs.getMetadataTypeByName(importSet.getTarget()));
-                    mdTitle.setValue(importSet.getSource());
-                    logical.addMetadata(mdTitle);
-                }
-            }
+            createMetadataFields(prefs, logical, jsonFile);
 
             return fileformat;
 
@@ -333,8 +327,8 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         String targetBase = process.getImagesOrigDirectory(false);
         File file = new File(importFolder, "file.jpg");
         if (file.canRead()) {
-            StorageProvider.getInstance().createDirectories(Paths.get(targetBase));
-            StorageProvider.getInstance().copyFile(Paths.get(file.getAbsolutePath()), Paths.get(targetBase, "file.jpg"));
+            storageProvider.createDirectories(Paths.get(targetBase));
+            storageProvider.copyFile(Paths.get(file.getAbsolutePath()), Paths.get(targetBase, "file.jpg"));
         }
     }
 
@@ -346,6 +340,50 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 myThread.startOrPutToQueue();
             }
         }
+    }
+
+    private void createMetadataFields(Prefs prefs, DocStruct ds, Path jsonFile) throws MetadataTypeNotAllowedException {
+        for (ImportSet importSet : importSets) {
+            // retrieve the value from the configured jsonPath
+            String source = importSet.getSource();
+            String value = getValueFromSource(source, jsonFile);
+            // prepare the MetadataType
+            String target = importSet.getTarget();
+            MetadataType targetType = prefs.getMetadataTypeByName(target);
+
+            // treat persons different than regular metadata
+            if (importSet.isPerson()) {
+                updateLog("Add person '" + target + "' with value '" + value + "'");
+                Person p = new Person(targetType);
+                String firstname = value.substring(0, value.indexOf(" "));
+                String lastname = value.substring(value.indexOf(" "));
+                p.setFirstname(firstname);
+                p.setLastname(lastname);
+                ds.addPerson(p);
+            } else {
+                updateLog("Add metadata '" + target + "' with value '" + value + "'");
+                Metadata mdTitle = new Metadata(targetType);
+                mdTitle.setValue(source);
+                ds.addMetadata(mdTitle);
+            }
+        }
+    }
+
+    private String getValueFromSource(String source, Path jsonFile) {
+        log.debug("jsonFile = " + jsonFile);
+        // for elements other than arrays, jsonPath should start with $
+        if (!source.startsWith("$")) {
+            // for those that are not json paths, just return themselves trimmed
+            return source.trim();
+        }
+
+        // remove the heading $
+        String jsonPath = source.substring(1);
+        // split jsonPath
+        String[] pathArray = jsonPath.split("\\.");
+        // iterate over pathArray to get the json object
+
+        return "";
     }
 
     private void reportError(String message) {
