@@ -43,6 +43,8 @@ import ugh.dl.DigitalDocument;
 import ugh.dl.DocStruct;
 import ugh.dl.Fileformat;
 import ugh.dl.Metadata;
+import ugh.dl.MetadataGroup;
+import ugh.dl.MetadataGroupType;
 import ugh.dl.MetadataType;
 import ugh.dl.Person;
 import ugh.dl.Prefs;
@@ -344,7 +346,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             createMetadataFields(prefs, logical, jsonObject);
 
             // create MetadataGroups
-            createMetadataGroups(prefs, logical, jsonObject);
+            //            createMetadataGroups(prefs, logical, jsonObject);
 
             return fileformat;
 
@@ -404,35 +406,55 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             String target = importSet.getTarget();
             MetadataType targetType = prefs.getMetadataTypeByName(target);
 
+            boolean isPerson = importSet.isPerson();
+
             for (String value : values) {
-                // treat persons different than regular metadata
-                if (importSet.isPerson()) {
+                Metadata md = createMetadata(targetType, value, isPerson);
+                if (isPerson) {
                     updateLog("Add person '" + target + "' with value '" + value + "'");
-                    Person p = new Person(targetType);
-                    String firstname = value.substring(0, value.indexOf(" "));
-                    String lastname = value.substring(value.indexOf(" "));
-                    p.setFirstname(firstname);
-                    p.setLastname(lastname);
-                    ds.addPerson(p);
+                    ds.addPerson((Person) md);
                 } else {
                     updateLog("Add metadata '" + target + "' with value '" + value + "'");
-                    Metadata md = new Metadata(targetType);
-                    md.setValue(value);
                     ds.addMetadata(md);
                 }
             }
         }
     }
 
-    private void createMetadataGroups(Prefs prefs, DocStruct ds, JSONObject jsonObject) {
+    private Metadata createMetadata(MetadataType targetType, String value, boolean isPerson) throws MetadataTypeNotAllowedException {
+        // treat persons different than regular metadata
+        if (isPerson) {
+            Person p = new Person(targetType);
+            int splitIndex = value.indexOf(" ");
+            String firstName = value.substring(0, splitIndex);
+            String lastName = value.substring(splitIndex);
+            p.setFirstname(firstName);
+            p.setLastname(lastName);
+            return p;
+        }
+
+        Metadata md = new Metadata(targetType);
+        md.setValue(value);
+        return md;
+    }
+
+    private void createMetadataGroups(Prefs prefs, DocStruct ds, JSONObject jsonObject) throws MetadataTypeNotAllowedException {
         log.debug("creating metadata groups");
         for (ImportGroupSet group : importGroupSets) {
-            log.debug("group.source = " + group.getSource());
-            log.debug("group.type = " + group.getType());
+            String source = group.getSource();
+            String type = group.getType();
+            log.debug("group.source = " + source);
+            log.debug("group.type = " + type);
+
+            MetadataGroupType groupType = prefs.getMetadataGroupTypeByName(type);
+            MetadataGroup mdGroup = new MetadataGroup(groupType);
+            ds.addMetadataGroup(mdGroup);
+
             List<ImportSet> elements = group.getElements();
             log.debug("group has " + elements.size() + " elements");
             for (ImportSet element : elements) {
                 log.debug(element);
+
             }
         }
     }
