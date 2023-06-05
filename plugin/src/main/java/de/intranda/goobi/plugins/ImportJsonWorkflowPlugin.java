@@ -13,6 +13,7 @@ import java.util.UUID;
 import org.apache.commons.collections4.queue.CircularFifoQueue;
 import org.apache.commons.compress.utils.IOUtils;
 import org.apache.commons.configuration.HierarchicalConfiguration;
+import org.apache.commons.configuration.XMLConfiguration;
 import org.goobi.beans.Process;
 import org.goobi.beans.Step;
 import org.goobi.production.enums.PluginType;
@@ -60,6 +61,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     private long lastPush = System.currentTimeMillis();
     @Getter
     private List<ImportSet> importSets;
+    private List<ImportGroupSet> importGroupSets;
     private PushContext pusher;
     @Getter
     private boolean run = false;
@@ -105,15 +107,17 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     private void readConfiguration() {
     	updateLog("Start reading the configuration");
     	
+        XMLConfiguration config = ConfigPlugins.getPluginConfig(title);
+
         // read some main configuration
-        importFolder = ConfigPlugins.getPluginConfig(title).getString("importFolder");
-        workflow = ConfigPlugins.getPluginConfig(title).getString("workflow");
-        publicationType = ConfigPlugins.getPluginConfig(title).getString("publicationType");
-        jsonFolder = ConfigPlugins.getPluginConfig(title).getString("jsonFolder");
+        importFolder = config.getString("importFolder");
+        workflow = config.getString("workflow");
+        publicationType = config.getString("publicationType");
+        jsonFolder = config.getString("jsonFolder");
         
         // read list of mapping configuration
         importSets = new ArrayList<>();
-        List<HierarchicalConfiguration> mappings = ConfigPlugins.getPluginConfig(title).configurationsAt("importSet");
+        List<HierarchicalConfiguration> mappings = config.configurationsAt("importSet");
         for (HierarchicalConfiguration node : mappings) {
             String settitle = node.getString("[@title]", "-");
             String source = node.getString("[@source]", "-");
@@ -122,6 +126,25 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             importSets.add(new ImportSet(settitle, source, target, person));
         }
         
+        // initialize importGroupSets
+        importGroupSets = new ArrayList<>();
+        List<HierarchicalConfiguration> groupMappings = config.configurationsAt("group");
+        for (HierarchicalConfiguration groupConfig : groupMappings) {
+            String source = groupConfig.getString("[@source]", "-");
+            String type = groupConfig.getString("[@type]", "-");
+            ImportGroupSet groupSet = new ImportGroupSet(source, type);
+            // add elements to the group
+            List<HierarchicalConfiguration> elementsMappings = groupConfig.configurationsAt("importSet");
+            for (HierarchicalConfiguration node : elementsMappings) {
+                String elementTitle = node.getString("[@title]", "-");
+                String elementSource = node.getString("[@source]", "-");
+                String elementTarget = node.getString("[@target]", "-");
+                boolean person = node.getBoolean("[@person]", false);
+                groupSet.addElement(new ImportSet(elementTitle, elementSource, elementTarget, person));
+            }
+            importGroupSets.add(groupSet);
+        }
+
         // write a log into the UI
         updateLog("Configuration successfully read");
     }
@@ -320,6 +343,9 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             // create the metadata fields by reading the config (and get content from the content files of course)
             createMetadataFields(prefs, logical, jsonObject);
 
+            // create MetadataGroups
+            createMetadataGroups(prefs, logical, jsonObject);
+
             return fileformat;
 
         } catch (PreferencesException | TypeNotAllowedForParentException | MetadataTypeNotAllowedException | IncompletePersonObjectException e) {
@@ -398,6 +424,19 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         }
     }
 
+    private void createMetadataGroups(Prefs prefs, DocStruct ds, JSONObject jsonObject) {
+        log.debug("creating metadata groups");
+        for (ImportGroupSet group : importGroupSets) {
+            log.debug("group.source = " + group.getSource());
+            log.debug("group.type = " + group.getType());
+            List<ImportSet> elements = group.getElements();
+            log.debug("group has " + elements.size() + " elements");
+            for (ImportSet element : elements) {
+                log.debug(element);
+            }
+        }
+    }
+
     private List<String> getValueFromSource(String source, JSONObject jsonObject) {
         List<String> results = new ArrayList<>();
         // for elements other than arrays, jsonPath should start with $.
@@ -406,6 +445,8 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             results.add(source.trim());
             return results;
         }
+
+        // get to the JSONObject
 
         // split jsonPath
         String[] pathArray = source.split("\\.");
@@ -448,6 +489,27 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         private String source;
         private String target;
         private boolean person;
+
+        public String toString() {
+            return source + " -> " + target;
+        }
+    }
+
+    @Data
+    public class ImportGroupSet {
+        private String source;
+        private String type;
+        private List<ImportSet> elements;
+
+        public ImportGroupSet(String source, String type) {
+            this.source = source;
+            this.type = type;
+            this.elements = new ArrayList<>();
+        }
+
+        public void addElement(ImportSet element) {
+            elements.add(element);
+        }
     }
 
     @Data
