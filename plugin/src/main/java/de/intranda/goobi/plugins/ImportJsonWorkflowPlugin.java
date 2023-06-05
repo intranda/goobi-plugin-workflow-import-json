@@ -2,6 +2,7 @@ package de.intranda.goobi.plugins;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -10,12 +11,14 @@ import java.util.Queue;
 import java.util.UUID;
 
 import org.apache.commons.collections4.queue.CircularFifoQueue;
+import org.apache.commons.compress.utils.IOUtils;
 import org.apache.commons.configuration.HierarchicalConfiguration;
 import org.goobi.beans.Process;
 import org.goobi.beans.Step;
 import org.goobi.production.enums.PluginType;
 import org.goobi.production.plugin.interfaces.IPushPlugin;
 import org.goobi.production.plugin.interfaces.IWorkflowPlugin;
+import org.json.JSONObject;
 import org.omnifaces.cdi.PushContext;
 
 import de.sub.goobi.config.ConfigPlugins;
@@ -165,8 +168,14 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                     String processName = createProcessName();
                     updateLog("Start importing: " + processName, 1);
 
+                    JSONObject jsonObject = getJsonObjectFromPath(jsonFile);
+                    if (jsonObject == null) {
+                        log.debug("jsonObject is null");
+                        return;
+                    }
+
                     // create and save the process
-                    boolean success = tryCreateAndSaveNewProcess(bhelp, processName, jsonFile);
+                    boolean success = tryCreateAndSaveNewProcess(bhelp, processName, jsonObject);
                     if (!success) {
                         String message = "Error while creating a process during the import";
                         reportError(message);
@@ -238,11 +247,28 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         return processName;
     }
     
-    private boolean tryCreateAndSaveNewProcess(BeanHelper bhelp, String processName, Path jsonFile) {
+    private JSONObject getJsonObjectFromPath(Path jsonFile) {
+        try (InputStream inputStream = storageProvider.newInputStream(jsonFile)) {
+            // save the file's contents into a string
+            String result = new String(IOUtils.toByteArray(inputStream));
+            //            log.debug(result);
+            // create a JSONObject from this json string
+            JSONObject jsonObject = new JSONObject(result);
+
+            return jsonObject;
+
+        } catch (IOException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private boolean tryCreateAndSaveNewProcess(BeanHelper bhelp, String processName, JSONObject jsonObject) {
         // get the correct workflow to use
         Process template = ProcessManager.getProcessByExactTitle(workflow);
         // prepare the Fileformat based on the template Process
-        Fileformat fileformat = prepareFileformatForNewProcess(template, jsonFile);
+        Fileformat fileformat = prepareFileformatForNewProcess(template, jsonObject);
         if (fileformat == null) {
             // error happened during the preparation
             return false;
@@ -272,7 +298,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         return true;
     }
 
-    private Fileformat prepareFileformatForNewProcess(Process template, Path jsonFile) {
+    private Fileformat prepareFileformatForNewProcess(Process template, JSONObject jsonObject) {
         Prefs prefs = template.getRegelsatz().getPreferences();
         try {
             Fileformat fileformat = new MetsMods(prefs);
@@ -291,7 +317,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             dd.setLogicalDocStruct(logical);
 
             // create the metadata fields by reading the config (and get content from the content files of course)
-            createMetadataFields(prefs, logical, jsonFile);
+            createMetadataFields(prefs, logical, jsonObject);
 
             return fileformat;
 
@@ -342,11 +368,11 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         }
     }
 
-    private void createMetadataFields(Prefs prefs, DocStruct ds, Path jsonFile) throws MetadataTypeNotAllowedException {
+    private void createMetadataFields(Prefs prefs, DocStruct ds, JSONObject jsonObject) throws MetadataTypeNotAllowedException {
         for (ImportSet importSet : importSets) {
             // retrieve the value from the configured jsonPath
             String source = importSet.getSource();
-            String value = getValueFromSource(source, jsonFile);
+            String value = getValueFromSource(source, jsonObject);
             // prepare the MetadataType
             String target = importSet.getTarget();
             MetadataType targetType = prefs.getMetadataTypeByName(target);
@@ -362,15 +388,14 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 ds.addPerson(p);
             } else {
                 updateLog("Add metadata '" + target + "' with value '" + value + "'");
-                Metadata mdTitle = new Metadata(targetType);
-                mdTitle.setValue(source);
-                ds.addMetadata(mdTitle);
+                Metadata md = new Metadata(targetType);
+                md.setValue(value);
+                ds.addMetadata(md);
             }
         }
     }
 
-    private String getValueFromSource(String source, Path jsonFile) {
-        log.debug("jsonFile = " + jsonFile);
+    private String getValueFromSource(String source, JSONObject jsonObject) {
         // for elements other than arrays, jsonPath should start with $
         if (!source.startsWith("$")) {
             // for those that are not json paths, just return themselves trimmed
@@ -382,8 +407,14 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         // split jsonPath
         String[] pathArray = jsonPath.split("\\.");
         // iterate over pathArray to get the json object
+        JSONObject tempObject = jsonObject;
+        for (int i = 0; i < pathArray.length - 1; ++i) {
+            String pathPart = pathArray[i];
+            tempObject = tempObject.getJSONObject(pathPart);
+        }
+        String key = pathArray[pathArray.length - 1];
 
-        return "";
+        return tempObject.getString(key);
     }
 
     private void reportError(String message) {
