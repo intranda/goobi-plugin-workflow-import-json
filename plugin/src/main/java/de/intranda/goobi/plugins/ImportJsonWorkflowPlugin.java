@@ -43,8 +43,6 @@ import ugh.dl.DigitalDocument;
 import ugh.dl.DocStruct;
 import ugh.dl.Fileformat;
 import ugh.dl.Metadata;
-import ugh.dl.MetadataGroup;
-import ugh.dl.MetadataGroupType;
 import ugh.dl.MetadataType;
 import ugh.dl.Person;
 import ugh.dl.Prefs;
@@ -346,7 +344,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             createMetadataFields(prefs, logical, jsonObject);
 
             // create MetadataGroups
-            //            createMetadataGroups(prefs, logical, jsonObject);
+            createMetadataGroups(prefs, logical, jsonObject);
 
             return fileformat;
 
@@ -401,7 +399,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         for (ImportSet importSet : importSets) {
             // retrieve the value from the configured jsonPath
             String source = importSet.getSource();
-            List<String> values = getValueFromSource(source, jsonObject);
+            List<String> values = getValuesFromSource(source, jsonObject);
             // prepare the MetadataType
             String target = importSet.getTarget();
             MetadataType targetType = prefs.getMetadataTypeByName(target);
@@ -441,28 +439,75 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     private void createMetadataGroups(Prefs prefs, DocStruct ds, JSONObject jsonObject) throws MetadataTypeNotAllowedException {
         log.debug("creating metadata groups");
         for (ImportGroupSet group : importGroupSets) {
-            String source = group.getSource();
+            String groupSource = group.getSource();
             String type = group.getType();
-            log.debug("group.source = " + source);
+            log.debug("group.source = " + groupSource);
             log.debug("group.type = " + type);
+            //            String basePath = processSourcePath(groupSource);
+            //            log.debug("basePath = " + basePath);
+            JSONObject tempObject = getToDirectParentObject(groupSource, jsonObject, true);
+            String arrayName = groupSource.substring(groupSource.lastIndexOf(".") + 1);
+            JSONArray elementsArray = tempObject.getJSONArray(arrayName);
+            for (int k = 0; k < elementsArray.length(); ++k) {
+                JSONObject elementObject = elementsArray.getJSONObject(k);
 
-            MetadataGroupType groupType = prefs.getMetadataGroupTypeByName(type);
-            MetadataGroup mdGroup = new MetadataGroup(groupType);
-            ds.addMetadataGroup(mdGroup);
-
-            List<ImportSet> elements = group.getElements();
-            log.debug("group has " + elements.size() + " elements");
-            for (ImportSet element : elements) {
-                log.debug(element);
-
+                List<ImportSet> elements = group.getElements();
+                log.debug("group has " + elements.size() + " elements");
+                for (ImportSet element : elements) {
+                    log.debug(element);
+                    String elementSource = element.getSource();
+                    String elementType = element.getTarget();
+                    //                String childPath = processSourcePath(elementSource);
+                    log.debug("elementSource = " + elementSource);
+                    log.debug("elementType = " + elementType);
+                    //                log.debug("childPath = " + childPath);
+                    List<String> values = getValuesFromJsonObject(elementSource, elementObject);
+                    for (String value : values) {
+                        log.debug("value = " + value);
+                    }
+                }
             }
+
+
+            //            MetadataGroupType groupType = prefs.getMetadataGroupTypeByName(type);
+            //            MetadataGroup mdGroup = new MetadataGroup(groupType);
+            //            ds.addMetadataGroup(mdGroup);
+
+            //            List<ImportSet> elements = group.getElements();
+            //            log.debug("group has " + elements.size() + " elements");
+            //            for (ImportSet element : elements) {
+            //                log.debug(element);
+            //                String elementSource = element.getSource();
+            //                String elementType = element.getTarget();
+            //                //                String childPath = processSourcePath(elementSource);
+            //                log.debug("elementSource = " + elementSource);
+            //                log.debug("elementType = " + elementType);
+            //                //                log.debug("childPath = " + childPath);
+            //
+            //            }
         }
     }
 
-    private List<String> getValueFromSource(String source, JSONObject jsonObject) {
+    private String processSourcePath(String path) {
+        if (path.startsWith("$")) {
+            // this is a base path, remove the heading $.
+            return path.substring(2);
+        }
+
+        if (path.startsWith("@")) {
+            // this is a sub path, indicating an importSet of a group or a child
+            // remove the heading @
+            return path.substring(2);
+        }
+
+        return null;
+
+    }
+
+    private List<String> getValuesFromSource(String source, JSONObject jsonObject) {
         List<String> results = new ArrayList<>();
-        // for elements other than arrays, jsonPath should start with $.
-        if (!source.startsWith("$")) {
+        // for source paths indicating jsonPaths, it should start with $. or with @.
+        if (!source.startsWith("$") && !source.startsWith("@")) {
             // for those that are not json paths, just return themselves trimmed
             results.add(source.trim());
             return results;
@@ -472,29 +517,82 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
 
         // split jsonPath
         String[] pathArray = source.split("\\.");
-        // iterate over pathArray to get the json object
-        JSONObject tempObject = jsonObject;
-        // skip the first item since it is nothign but a $
-        for (int i = 1; i < pathArray.length - 1; ++i) {
-            String pathPart = pathArray[i];
-            tempObject = tempObject.getJSONObject(pathPart);
-        }
+        //        // iterate over pathArray to get the json object
+        //        JSONObject tempObject = jsonObject;
+        //        // skip the first item since it is nothign but a $
+        //        for (int i = 1; i < pathArray.length - 1; ++i) {
+        //            String pathPart = pathArray[i];
+        //            tempObject = tempObject.getJSONObject(pathPart);
+        //        }
+
+        JSONObject tempObject = getToDirectParentObject(source, jsonObject, false);
 
         // the leaf element of the path is the key
         String key = pathArray[pathArray.length - 1];
-        if (!key.endsWith("[:]")) {
-            results.add(tempObject.getString(key));
-        } else {
-            // the value is an array
-            key = key.substring(0, key.length() - 3);
-            JSONArray jsonArray = tempObject.getJSONArray(key);
-            for (int i = 0; i < jsonArray.length(); ++i) {
-                String value = jsonArray.getString(i);
-                results.add(value);
-            }
+        //        if (!key.endsWith("[:]")) {
+        //            results.add(tempObject.getString(key));
+        //        } else {
+        //            // the value is an array
+        //            key = key.substring(0, key.length() - 3);
+        //            JSONArray jsonArray = tempObject.getJSONArray(key);
+        //            for (int i = 0; i < jsonArray.length(); ++i) {
+        //                String value = jsonArray.getString(i);
+        //                results.add(value);
+        //            }
+        //        }
+        
+        results = getValuesFromJsonObject(key, tempObject);
+
+        return results;
+    }
+
+    private JSONObject getToDirectParentObject(String source, JSONObject jsonObject, boolean isGroup) {
+        String[] paths = source.split("\\.");
+        JSONObject tempObject = jsonObject;
+        // skip the first one which is nothing but the heading $
+        for (int i = 1; i < paths.length - 1; ++i) {
+            tempObject = tempObject.getJSONObject(paths[i]);
+        }
+        //        if (isGroup) {
+        //            tempObject = tempObject.getJSONObject(paths[paths.length - 1]);
+        //        }
+
+        return tempObject;
+    }
+
+    private List<String> getValuesFromJsonObject(String key, JSONObject jsonObject) {
+        // suppose from now on our jsonObject is the one that is the direct parent of some leaf nodes
+        // i.e. source will not start with $
+        // if it is not starting with @ then it is just a value of the jsonObject
+        // otherwise it is a child importSet
+        List<String> results = new ArrayList<>();
+        String filteredKey = key.startsWith("@") ? key.substring(2) : key;
+
+        //        if (!source.startsWith("@")) {
+
+        if (!filteredKey.endsWith("[:]")) {
+            // it is not an array
+            results.add(jsonObject.getString(filteredKey));
+            return results;
+        }
+
+        // it is an array
+        // remove the tailing [:]
+        String arrayName = filteredKey.substring(0, key.length() - 3);
+        JSONArray jsonArray = jsonObject.getJSONArray(arrayName);
+        for (int i = 0; i < jsonArray.length(); ++i) {
+            String value = jsonArray.getString(i);
+            results.add(value);
         }
 
         return results;
+            //        }
+
+        // it is a sub-element
+
+        
+        
+        
     }
 
     private void reportError(String message) {
