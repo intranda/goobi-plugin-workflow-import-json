@@ -478,20 +478,19 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         md.setValue(value);
         if (isUrl) {
             // download the image from the url to the importFolder
-            downloadImageFile(value, importFolder);
+            downloadImage(value, importFolder);
         }
 
         return md;
     }
 
     /**
-     * download the image file from the given url
+     * download the image from the given url
      * 
-     * @param strUrl url of the image file
-     * @param processImageFolder media folder of the process
-     * @return the image file as a File object if it is successfully downloaded, null if any IOException should occur
+     * @param strUrl url of the image
+     * @param targetFolder targeted folder to download the image file
      */
-    private File downloadImageFile(String strUrl, String processImageFolder) {
+    private void downloadImage(String strUrl, String targetFolder) {
         log.debug("downloading image from url: " + strUrl);
         // check url
         URL url = null;
@@ -500,24 +499,22 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         } catch (MalformedURLException e) {
             String message = "the input URL is malformed: " + strUrl;
             reportError(message);
-            return null;
+            return;
         }
 
         // url is correctly formed, start to download
         String imageName = getImageNameFromUrl(url);
-        Path targetPath = Path.of(processImageFolder, imageName);
+        Path targetPath = Path.of(targetFolder, imageName);
 
         try (ReadableByteChannel readableByteChannel = Channels.newChannel(url.openStream());
                 FileOutputStream outputStream = new FileOutputStream(targetPath.toString())) {
 
             FileChannel fileChannel = outputStream.getChannel();
             fileChannel.transferFrom(readableByteChannel, 0, Long.MAX_VALUE);
-            return new File(targetPath.toString());
 
         } catch (IOException e) {
             String message = "failed to download the image from " + strUrl;
             reportError(message);
-            return null;
         }
     }
 
