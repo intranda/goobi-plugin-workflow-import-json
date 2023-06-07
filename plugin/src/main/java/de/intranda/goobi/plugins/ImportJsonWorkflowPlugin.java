@@ -443,9 +443,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             String type = group.getType();
             log.debug("group.source = " + groupSource);
             log.debug("group.type = " + type);
-            //            String basePath = processSourcePath(groupSource);
-            //            log.debug("basePath = " + basePath);
-            JSONObject tempObject = getToDirectParentObject(groupSource, jsonObject, true);
+            JSONObject tempObject = getToDirectParentObject(groupSource, jsonObject);
             String arrayName = groupSource.substring(groupSource.lastIndexOf(".") + 1);
             JSONArray elementsArray = tempObject.getJSONArray(arrayName);
             for (int k = 0; k < elementsArray.length(); ++k) {
@@ -457,10 +455,8 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                     log.debug(element);
                     String elementSource = element.getSource();
                     String elementType = element.getTarget();
-                    //                String childPath = processSourcePath(elementSource);
                     log.debug("elementSource = " + elementSource);
                     log.debug("elementType = " + elementType);
-                    //                log.debug("childPath = " + childPath);
                     List<String> values = getValuesFromJsonObject(elementSource, elementObject);
                     for (String value : values) {
                         log.debug("value = " + value);
@@ -468,40 +464,10 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 }
             }
 
-
             //            MetadataGroupType groupType = prefs.getMetadataGroupTypeByName(type);
             //            MetadataGroup mdGroup = new MetadataGroup(groupType);
             //            ds.addMetadataGroup(mdGroup);
-
-            //            List<ImportSet> elements = group.getElements();
-            //            log.debug("group has " + elements.size() + " elements");
-            //            for (ImportSet element : elements) {
-            //                log.debug(element);
-            //                String elementSource = element.getSource();
-            //                String elementType = element.getTarget();
-            //                //                String childPath = processSourcePath(elementSource);
-            //                log.debug("elementSource = " + elementSource);
-            //                log.debug("elementType = " + elementType);
-            //                //                log.debug("childPath = " + childPath);
-            //
-            //            }
         }
-    }
-
-    private String processSourcePath(String path) {
-        if (path.startsWith("$")) {
-            // this is a base path, remove the heading $.
-            return path.substring(2);
-        }
-
-        if (path.startsWith("@")) {
-            // this is a sub path, indicating an importSet of a group or a child
-            // remove the heading @
-            return path.substring(2);
-        }
-
-        return null;
-
     }
 
     private List<String> getValuesFromSource(String source, JSONObject jsonObject) {
@@ -514,48 +480,21 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         }
 
         // get to the JSONObject
-
-        // split jsonPath
-        String[] pathArray = source.split("\\.");
-        //        // iterate over pathArray to get the json object
-        //        JSONObject tempObject = jsonObject;
-        //        // skip the first item since it is nothign but a $
-        //        for (int i = 1; i < pathArray.length - 1; ++i) {
-        //            String pathPart = pathArray[i];
-        //            tempObject = tempObject.getJSONObject(pathPart);
-        //        }
-
-        JSONObject tempObject = getToDirectParentObject(source, jsonObject, false);
+        JSONObject tempObject = getToDirectParentObject(source, jsonObject);
 
         // the leaf element of the path is the key
-        String key = pathArray[pathArray.length - 1];
-        //        if (!key.endsWith("[:]")) {
-        //            results.add(tempObject.getString(key));
-        //        } else {
-        //            // the value is an array
-        //            key = key.substring(0, key.length() - 3);
-        //            JSONArray jsonArray = tempObject.getJSONArray(key);
-        //            for (int i = 0; i < jsonArray.length(); ++i) {
-        //                String value = jsonArray.getString(i);
-        //                results.add(value);
-        //            }
-        //        }
+        String key = source.substring(source.lastIndexOf(".") + 1);
         
-        results = getValuesFromJsonObject(key, tempObject);
-
-        return results;
+        return getValuesFromJsonObject(key, tempObject);
     }
 
-    private JSONObject getToDirectParentObject(String source, JSONObject jsonObject, boolean isGroup) {
+    private JSONObject getToDirectParentObject(String source, JSONObject jsonObject) {
         String[] paths = source.split("\\.");
         JSONObject tempObject = jsonObject;
         // skip the first one which is nothing but the heading $
         for (int i = 1; i < paths.length - 1; ++i) {
             tempObject = tempObject.getJSONObject(paths[i]);
         }
-        //        if (isGroup) {
-        //            tempObject = tempObject.getJSONObject(paths[paths.length - 1]);
-        //        }
 
         return tempObject;
     }
@@ -567,8 +506,6 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         // otherwise it is a child importSet
         List<String> results = new ArrayList<>();
         String filteredKey = key.startsWith("@") ? key.substring(2) : key;
-
-        //        if (!source.startsWith("@")) {
 
         if (!filteredKey.endsWith("[:]")) {
             // it is not an array
@@ -586,13 +523,6 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         }
 
         return results;
-            //        }
-
-        // it is a sub-element
-
-        
-        
-        
     }
 
     private void reportError(String message) {
