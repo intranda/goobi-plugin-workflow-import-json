@@ -1,10 +1,15 @@
 package de.intranda.goobi.plugins;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.nio.channels.Channels;
+import java.nio.channels.FileChannel;
+import java.nio.channels.ReadableByteChannel;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Queue;
@@ -81,6 +86,9 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     
     private String jsonFolder;
 
+    private String urlMetadata;
+    private String imageExtension = ".jpg";
+
     private StorageProviderInterface storageProvider = StorageProvider.getInstance();
 
     @Override
@@ -116,6 +124,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         workflow = config.getString("workflow");
         publicationType = config.getString("publicationType");
         jsonFolder = config.getString("jsonFolder");
+        urlMetadata = config.getString("urlMetadata", "");
         
         // read list of mapping configuration
         importSets = new ArrayList<>();
@@ -367,7 +376,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             // create MetadataGroups
             //            createMetadataGroups(prefs, logical, jsonObject);
 
-            // create child DocStruct
+            // create child DocStructs
             createChildDocStructs(prefs, dd, logical, jsonObject);
 
             return fileformat;
@@ -403,10 +412,17 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         // if media files are given, import these into the media folder of the process
         updateLog("Start copying media files");
         String targetBase = process.getImagesOrigDirectory(false);
-        File file = new File(importFolder, "file.jpg");
-        if (file.canRead()) {
-            storageProvider.createDirectories(Paths.get(targetBase));
-            storageProvider.copyFile(Paths.get(file.getAbsolutePath()), Paths.get(targetBase, "file.jpg"));
+        // prepare the directories
+        storageProvider.createDirectories(Path.of(targetBase));
+        List<Path> filesToImport = storageProvider.listFiles(importFolder);
+        for (Path path : filesToImport) {
+            File file = path.toFile();
+            if (file.canRead()) {
+                String fileName = path.getFileName().toString();
+                log.debug("fileName = " + fileName);
+                Path targetPath = Path.of(targetBase, fileName);
+                storageProvider.copyFile(path, targetPath);
+            }
         }
     }
 
@@ -429,11 +445,12 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             // prepare the MetadataType
             String target = importSet.getTarget();
             MetadataType targetType = prefs.getMetadataTypeByName(target);
+            boolean isUrl = urlMetadata.equals(target);
 
             boolean isPerson = importSet.isPerson();
 
             for (String value : values) {
-                Metadata md = createMetadata(targetType, value, isPerson);
+                Metadata md = createMetadata(targetType, value, isPerson, isUrl);
                 if (isPerson) {
                     updateLog("Add person '" + target + "' with value '" + value + "'");
                     ds.addPerson((Person) md);
@@ -445,7 +462,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         }
     }
 
-    private Metadata createMetadata(MetadataType targetType, String value, boolean isPerson) throws MetadataTypeNotAllowedException {
+    private Metadata createMetadata(MetadataType targetType, String value, boolean isPerson, boolean isUrl) throws MetadataTypeNotAllowedException {
         // treat persons different than regular metadata
         if (isPerson) {
             Person p = new Person(targetType);
@@ -459,7 +476,65 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
 
         Metadata md = new Metadata(targetType);
         md.setValue(value);
+        if (isUrl) {
+            // download the image from the url to the importFolder
+            downloadImageFile(value, importFolder);
+        }
+
         return md;
+    }
+
+    /**
+     * download the image file from the given url
+     * 
+     * @param strUrl url of the image file
+     * @param processImageFolder media folder of the process
+     * @return the image file as a File object if it is successfully downloaded, null if any IOException should occur
+     */
+    private File downloadImageFile(String strUrl, String processImageFolder) {
+        log.debug("downloading image from url: " + strUrl);
+        // check url
+        URL url = null;
+        try {
+            url = new URL(strUrl);
+        } catch (MalformedURLException e) {
+            String message = "the input URL is malformed: " + strUrl;
+            reportError(message);
+            return null;
+        }
+
+        // url is correctly formed, start to download
+        String imageName = getImageNameFromUrl(url);
+        Path targetPath = Path.of(processImageFolder, imageName);
+
+        try (ReadableByteChannel readableByteChannel = Channels.newChannel(url.openStream());
+                FileOutputStream outputStream = new FileOutputStream(targetPath.toString())) {
+
+            FileChannel fileChannel = outputStream.getChannel();
+            fileChannel.transferFrom(readableByteChannel, 0, Long.MAX_VALUE);
+            return new File(targetPath.toString());
+
+        } catch (IOException e) {
+            String message = "failed to download the image from " + strUrl;
+            reportError(message);
+            return null;
+        }
+    }
+
+    /**
+     * get the image name from a URL object
+     * 
+     * @param url the URL object
+     * @return the full image name including the configured image extension
+     */
+    private String getImageNameFromUrl(URL url) {
+        String urlFileName = url.getFile();
+        log.debug("urlFileName = " + urlFileName);
+
+        String imageName = urlFileName.replaceAll("\\W", "_") + imageExtension;
+        log.debug("imageName = " + imageName);
+
+        return imageName;
     }
 
     private void createMetadataGroups(Prefs prefs, DocStruct ds, JSONObject jsonObject) throws MetadataTypeNotAllowedException {
@@ -519,10 +594,11 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             JSONArray elementsArray = tempObject.getJSONArray(arrayName);
             // process every JSONObject in this JSONArray
             for (int k = 0; k < elementsArray.length(); ++k) {
-                // every sub-element should be a DocStruct
+                // every sub-element should be a child DocStruct
                 JSONObject elementObject = elementsArray.getJSONObject(k);
                 DocStruct childStruct = dd.createDocStruct(prefs.getDocStrctTypeByName(structType));
                 ds.addChild(childStruct);
+                // create metadata fields to the child DocStruct
                 createMetadataFields(prefs, childStruct, elementObject, childImportSets);
             }
         }
