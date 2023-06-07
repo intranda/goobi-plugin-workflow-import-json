@@ -399,7 +399,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         for (ImportSet importSet : importSets) {
             // retrieve the value from the configured jsonPath
             String source = importSet.getSource();
-            List<String> values = getValuesFromSource(source, jsonObject);
+            List<String> values = getValuesFromEasySource(source, jsonObject);
             // prepare the MetadataType
             String target = importSet.getTarget();
             MetadataType targetType = prefs.getMetadataTypeByName(target);
@@ -443,14 +443,17 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             String type = group.getType();
             log.debug("group.source = " + groupSource);
             log.debug("group.type = " + type);
-            JSONObject tempObject = getToDirectParentObject(groupSource, jsonObject);
+            List<ImportSet> elements = group.getElements();
+            log.debug("group has " + elements.size() + " elements");
+
+            JSONObject tempObject = getDirectParentOfLeafObject(groupSource, jsonObject);
             String arrayName = groupSource.substring(groupSource.lastIndexOf(".") + 1);
+            log.debug("arrayName = " + arrayName);
             JSONArray elementsArray = tempObject.getJSONArray(arrayName);
+            // process every JSONObject in this JSONArray
             for (int k = 0; k < elementsArray.length(); ++k) {
                 JSONObject elementObject = elementsArray.getJSONObject(k);
-
-                List<ImportSet> elements = group.getElements();
-                log.debug("group has " + elements.size() + " elements");
+                // process every sub-element of that JSONObject
                 for (ImportSet element : elements) {
                     log.debug(element);
                     String elementSource = element.getSource();
@@ -459,6 +462,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                     log.debug("elementType = " + elementType);
                     List<String> values = getValuesFromJsonObject(elementSource, elementObject);
                     for (String value : values) {
+                        // for every value create a Metadata of that value
                         log.debug("value = " + value);
                     }
                 }
@@ -470,7 +474,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         }
     }
 
-    private List<String> getValuesFromSource(String source, JSONObject jsonObject) {
+    private List<String> getValuesFromEasySource(String source, JSONObject jsonObject) {
         List<String> results = new ArrayList<>();
         // for source paths indicating jsonPaths, it should start with $. or with @.
         if (!source.startsWith("$") && !source.startsWith("@")) {
@@ -480,19 +484,19 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         }
 
         // get to the JSONObject
-        JSONObject tempObject = getToDirectParentObject(source, jsonObject);
-
-        // the leaf element of the path is the key
+        JSONObject tempObject = getDirectParentOfLeafObject(source, jsonObject);
+        // the key is the tailing part of source after the last dot
         String key = source.substring(source.lastIndexOf(".") + 1);
         
         return getValuesFromJsonObject(key, tempObject);
     }
 
-    private JSONObject getToDirectParentObject(String source, JSONObject jsonObject) {
+    private JSONObject getDirectParentOfLeafObject(String source, JSONObject jsonObject) {
         String[] paths = source.split("\\.");
         JSONObject tempObject = jsonObject;
         // skip the first one which is nothing but the heading $
         for (int i = 1; i < paths.length - 1; ++i) {
+            log.debug("moving forward to " + paths[i]);
             tempObject = tempObject.getJSONObject(paths[i]);
         }
 
