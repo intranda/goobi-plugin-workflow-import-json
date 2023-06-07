@@ -49,6 +49,7 @@ import ugh.dl.Prefs;
 import ugh.exceptions.IncompletePersonObjectException;
 import ugh.exceptions.MetadataTypeNotAllowedException;
 import ugh.exceptions.PreferencesException;
+import ugh.exceptions.TypeNotAllowedAsChildException;
 import ugh.exceptions.TypeNotAllowedForParentException;
 import ugh.fileformats.mets.MetsMods;
 
@@ -62,6 +63,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     @Getter
     private List<ImportSet> importSets;
     private List<ImportGroupSet> importGroupSets;
+    private List<ImportChildDocStruct> importChildDocStructs;
     private PushContext pusher;
     @Getter
     private boolean run = false;
@@ -143,6 +145,25 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 groupSet.addElement(new ImportSet(elementTitle, elementSource, elementTarget, person));
             }
             importGroupSets.add(groupSet);
+        }
+
+        // initialize importChildDocStructs
+        importChildDocStructs = new ArrayList<>();
+        List<HierarchicalConfiguration> childMappings = config.configurationsAt("child");
+        for (HierarchicalConfiguration childConfig : childMappings) {
+            String source = childConfig.getString("[@source]", "-");
+            String type = childConfig.getString("[@type]", "-");
+            ImportChildDocStruct childStruct = new ImportChildDocStruct(source, type);
+            // add elements to the group
+            List<HierarchicalConfiguration> elementsMappings = childConfig.configurationsAt("importSet");
+            for (HierarchicalConfiguration node : elementsMappings) {
+                String elementTitle = node.getString("[@title]", "-");
+                String elementSource = node.getString("[@source]", "-");
+                String elementTarget = node.getString("[@target]", "-");
+                boolean person = node.getBoolean("[@person]", false);
+                childStruct.addElement(new ImportSet(elementTitle, elementSource, elementTarget, person));
+            }
+            importChildDocStructs.add(childStruct);
         }
 
         // write a log into the UI
@@ -341,14 +362,18 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             dd.setLogicalDocStruct(logical);
 
             // create the metadata fields by reading the config (and get content from the content files of course)
-            createMetadataFields(prefs, logical, jsonObject);
+            createMetadataFields(prefs, logical, jsonObject, this.importSets);
 
             // create MetadataGroups
-            createMetadataGroups(prefs, logical, jsonObject);
+            //            createMetadataGroups(prefs, logical, jsonObject);
+
+            // create child DocStruct
+            createChildDocStructs(prefs, dd, logical, jsonObject);
 
             return fileformat;
 
-        } catch (PreferencesException | TypeNotAllowedForParentException | MetadataTypeNotAllowedException | IncompletePersonObjectException e) {
+        } catch (PreferencesException | TypeNotAllowedForParentException | MetadataTypeNotAllowedException | IncompletePersonObjectException
+                | TypeNotAllowedAsChildException e) {
             String message = "Error while preparing the Fileformat for the new process: " + e.getMessage();
             reportError(message);
             return null;
@@ -395,7 +420,8 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         }
     }
 
-    private void createMetadataFields(Prefs prefs, DocStruct ds, JSONObject jsonObject) throws MetadataTypeNotAllowedException {
+    private void createMetadataFields(Prefs prefs, DocStruct ds, JSONObject jsonObject, List<ImportSet> importSets)
+            throws MetadataTypeNotAllowedException {
         for (ImportSet importSet : importSets) {
             // retrieve the value from the configured jsonPath
             String source = importSet.getSource();
@@ -446,6 +472,11 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             List<ImportSet> elements = group.getElements();
             log.debug("group has " + elements.size() + " elements");
 
+            // create and add the MetadataGroup
+            //            MetadataGroupType groupType = prefs.getMetadataGroupTypeByName(type);
+            //            MetadataGroup mdGroup = new MetadataGroup(groupType);
+            //            ds.addMetadataGroup(mdGroup);
+
             JSONObject tempObject = getDirectParentOfLeafObject(groupSource, jsonObject);
             String arrayName = groupSource.substring(groupSource.lastIndexOf(".") + 1);
             log.debug("arrayName = " + arrayName);
@@ -453,7 +484,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             // process every JSONObject in this JSONArray
             for (int k = 0; k < elementsArray.length(); ++k) {
                 JSONObject elementObject = elementsArray.getJSONObject(k);
-                // process every sub-element of that JSONObject
+                // every sub-element should be a DocStruct
                 for (ImportSet element : elements) {
                     log.debug(element);
                     String elementSource = element.getSource();
@@ -467,10 +498,33 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                     }
                 }
             }
+        }
+    }
 
-            //            MetadataGroupType groupType = prefs.getMetadataGroupTypeByName(type);
-            //            MetadataGroup mdGroup = new MetadataGroup(groupType);
-            //            ds.addMetadataGroup(mdGroup);
+    private void createChildDocStructs(Prefs prefs, DigitalDocument dd, DocStruct ds, JSONObject jsonObject)
+            throws TypeNotAllowedForParentException, TypeNotAllowedAsChildException, MetadataTypeNotAllowedException {
+        log.debug("creating child DocStructs");
+        log.debug("importChildDocStructs has length = " + importChildDocStructs.size());
+        for (ImportChildDocStruct struct : importChildDocStructs) {
+            String structSource = struct.getSource();
+            String structType = struct.getType();
+            log.debug("structSource = " + structSource);
+            log.debug("structType = " + structType);
+
+            List<ImportSet> childImportSets = struct.getElements();
+            
+            JSONObject tempObject = getDirectParentOfLeafObject(structSource, jsonObject);
+            String arrayName = structSource.substring(structSource.lastIndexOf(".") + 1);
+            log.debug("arrayName = " + arrayName);
+            JSONArray elementsArray = tempObject.getJSONArray(arrayName);
+            // process every JSONObject in this JSONArray
+            for (int k = 0; k < elementsArray.length(); ++k) {
+                // every sub-element should be a DocStruct
+                JSONObject elementObject = elementsArray.getJSONObject(k);
+                DocStruct childStruct = dd.createDocStruct(prefs.getDocStrctTypeByName(structType));
+                ds.addChild(childStruct);
+                createMetadataFields(prefs, childStruct, elementObject, childImportSets);
+            }
         }
     }
 
@@ -556,6 +610,23 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         private List<ImportSet> elements;
 
         public ImportGroupSet(String source, String type) {
+            this.source = source;
+            this.type = type;
+            this.elements = new ArrayList<>();
+        }
+
+        public void addElement(ImportSet element) {
+            elements.add(element);
+        }
+    }
+
+    @Data
+    public class ImportChildDocStruct {
+        private String source;
+        private String type;
+        private List<ImportSet> elements;
+
+        public ImportChildDocStruct(String source, String type) {
             this.source = source;
             this.type = type;
             this.elements = new ArrayList<>();
