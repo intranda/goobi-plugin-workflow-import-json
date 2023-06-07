@@ -222,10 +222,10 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                     String processName = createProcessName();
                     updateLog("Start importing: " + processName, 1);
 
-                    JSONObject jsonObject = getJsonObjectFromPath(jsonFile);
+                    JSONObject jsonObject = getJsonObjectFromJsonFile(jsonFile);
                     if (jsonObject == null) {
-                        log.debug("jsonObject is null");
-                        return;
+                        log.debug("Failed to import from " + jsonFile);
+                        continue;
                     }
 
                     // create and save the process
@@ -277,19 +277,17 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         return processName;
     }
     
-    private JSONObject getJsonObjectFromPath(Path jsonFile) {
+    private JSONObject getJsonObjectFromJsonFile(Path jsonFile) {
         try (InputStream inputStream = storageProvider.newInputStream(jsonFile)) {
             // save the file's contents into a string
             String result = new String(IOUtils.toByteArray(inputStream));
             //            log.debug(result);
             // create a JSONObject from this json string
-            JSONObject jsonObject = new JSONObject(result);
-
-            return jsonObject;
+            return new JSONObject(result);
 
         } catch (IOException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
+            String message = "Errors happened while trying to create a JSONObject from contents of " + jsonFile;
+            reportError(message);
             return null;
         }
     }
@@ -350,7 +348,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             createMetadataFields(prefs, logical, jsonObject, this.importSets);
 
             // create MetadataGroups
-            //            createMetadataGroups(prefs, logical, jsonObject);
+            createMetadataGroups(prefs, logical, jsonObject);
 
             // create children DocStructs
             createChildDocStructs(prefs, logical, jsonObject, dd);
