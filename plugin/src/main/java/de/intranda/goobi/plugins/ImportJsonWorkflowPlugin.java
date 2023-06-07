@@ -288,14 +288,11 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         processName = processName.replaceAll(regex, "_").trim();
 
         // assure the uniqueness of the process name
-        if (ProcessManager.countProcessTitle(processName, null) > 0) {
-            int tempCounter = 1;
-            String tempName = processName + "_" + tempCounter;
-            while (ProcessManager.countProcessTitle(tempName, null) > 0) {
-                tempCounter++;
-                tempName = processName + "_" + tempCounter;
-            }
-            processName = tempName;
+        int tempCounter = 1;
+        String tempName = processName;
+        while (ProcessManager.countProcessTitle(processName, null) > 0) {
+            processName = tempName + "_" + tempCounter;
+            ++tempCounter;
         }
 
         return processName;
