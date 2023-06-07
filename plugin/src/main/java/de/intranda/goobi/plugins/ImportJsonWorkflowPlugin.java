@@ -259,27 +259,6 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     public void setPushContext(PushContext pusher) {
         this.pusher = pusher;
     }
-
-	/**
-	 * simple method to send status message to gui
-	 * @param logmessage
-	 */
-	private void updateLog(String logmessage) {
-		updateLog(logmessage, 0);
-	}
-	
-	/**
-	 * simple method to send status message with specific level to gui
-	 * @param logmessage
-	 */
-	private void updateLog(String logmessage, int level) {
-		logQueue.add(new LogMessage(logmessage, level));
-		log.debug(logmessage);
-		if (pusher != null && System.currentTimeMillis() - lastPush > 500) {
-            lastPush = System.currentTimeMillis();
-            pusher.send("update");
-        }
-	}
 	
     private String createProcessName() {
         // create a process name via UUID
@@ -367,19 +346,18 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             DocStruct logical = dd.createDocStruct(prefs.getDocStrctTypeByName(publicationType));
             dd.setLogicalDocStruct(logical);
 
-            // create the metadata fields by reading the config (and get content from the content files of course)
+            // create metadata fields 
             createMetadataFields(prefs, logical, jsonObject, this.importSets);
 
             // create MetadataGroups
             //            createMetadataGroups(prefs, logical, jsonObject);
 
-            // create child DocStructs
-            createChildDocStructs(prefs, dd, logical, jsonObject);
+            // create children DocStructs
+            createChildDocStructs(prefs, logical, jsonObject, dd);
 
             return fileformat;
 
-        } catch (PreferencesException | TypeNotAllowedForParentException | MetadataTypeNotAllowedException | IncompletePersonObjectException
-                | TypeNotAllowedAsChildException e) {
+        } catch (PreferencesException | TypeNotAllowedForParentException | MetadataTypeNotAllowedException | IncompletePersonObjectException e) {
             String message = "Error while preparing the Fileformat for the new process: " + e.getMessage();
             reportError(message);
             return null;
@@ -433,8 +411,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         }
     }
 
-    private void createMetadataFields(Prefs prefs, DocStruct ds, JSONObject jsonObject, List<ImportSet> importSets)
-            throws MetadataTypeNotAllowedException {
+    private void createMetadataFields(Prefs prefs, DocStruct ds, JSONObject jsonObject, List<ImportSet> importSets) {
         for (ImportSet importSet : importSets) {
             // retrieve the value from the configured jsonPath
             String source = importSet.getSource();
@@ -447,13 +424,18 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             boolean isPerson = importSet.isPerson();
 
             for (String value : values) {
-                Metadata md = createMetadata(targetType, value, isPerson, isUrl);
-                if (isPerson) {
-                    updateLog("Add person '" + target + "' with value '" + value + "'");
-                    ds.addPerson((Person) md);
-                } else {
-                    updateLog("Add metadata '" + target + "' with value '" + value + "'");
-                    ds.addMetadata(md);
+                try {
+                    Metadata md = createMetadata(targetType, value, isPerson, isUrl);
+                    if (isPerson) {
+                        updateLog("Add person '" + target + "' with value '" + value + "'");
+                        ds.addPerson((Person) md);
+                    } else {
+                        updateLog("Add metadata '" + target + "' with value '" + value + "'");
+                        ds.addMetadata(md);
+                    }
+                } catch (MetadataTypeNotAllowedException e) {
+                    String message = "MetadataType " + target + " is not allowed. Skipping...";
+                    reportError(message);
                 }
             }
         }
@@ -477,7 +459,6 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             // download the image from the url to the importFolder
             downloadImage(value, importFolder);
         }
-
         return md;
     }
 
@@ -531,7 +512,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         return imageName;
     }
 
-    private void createMetadataGroups(Prefs prefs, DocStruct ds, JSONObject jsonObject) throws MetadataTypeNotAllowedException {
+    private void createMetadataGroups(Prefs prefs, DocStruct ds, JSONObject jsonObject) {
         log.debug("creating metadata groups");
         for (ImportGroupSet group : importGroupSets) {
             String groupSource = group.getSource();
@@ -570,9 +551,8 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         }
     }
 
-    private void createChildDocStructs(Prefs prefs, DigitalDocument dd, DocStruct ds, JSONObject jsonObject)
-            throws TypeNotAllowedForParentException, TypeNotAllowedAsChildException, MetadataTypeNotAllowedException {
-        log.debug("creating child DocStructs");
+    private void createChildDocStructs(Prefs prefs, DocStruct ds, JSONObject jsonObject, DigitalDocument dd) {
+        log.debug("creating children DocStructs");
         log.debug("importChildDocStructs has length = " + importChildDocStructs.size());
         for (ImportChildDocStruct struct : importChildDocStructs) {
             String structSource = struct.getSource();
@@ -590,10 +570,15 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             for (int k = 0; k < elementsArray.length(); ++k) {
                 // every sub-element should be a child DocStruct
                 JSONObject elementObject = elementsArray.getJSONObject(k);
-                DocStruct childStruct = dd.createDocStruct(prefs.getDocStrctTypeByName(structType));
-                ds.addChild(childStruct);
-                // create metadata fields to the child DocStruct
-                createMetadataFields(prefs, childStruct, elementObject, childImportSets);
+                try {
+                    DocStruct childStruct = dd.createDocStruct(prefs.getDocStrctTypeByName(structType));
+                    ds.addChild(childStruct);
+                    // create metadata fields to the child DocStruct
+                    createMetadataFields(prefs, childStruct, elementObject, childImportSets);
+                } catch (TypeNotAllowedForParentException | TypeNotAllowedAsChildException e) {
+                    String message = "Error while trying to create children DocStructs";
+                    reportError(message);
+                }
             }
         }
     }
@@ -658,6 +643,29 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         updateLog(message, 3);
         Helper.setFehlerMeldung(message);
         pusher.send("error");
+    }
+
+    /**
+     * simple method to send status message to gui
+     * 
+     * @param logmessage
+     */
+    private void updateLog(String logmessage) {
+        updateLog(logmessage, 0);
+    }
+
+    /**
+     * simple method to send status message with specific level to gui
+     * 
+     * @param logmessage
+     */
+    private void updateLog(String logmessage, int level) {
+        logQueue.add(new LogMessage(logmessage, level));
+        log.debug(logmessage);
+        if (pusher != null && System.currentTimeMillis() - lastPush > 500) {
+            lastPush = System.currentTimeMillis();
+            pusher.send("update");
+        }
     }
 
     @Data
