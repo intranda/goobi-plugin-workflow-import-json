@@ -618,9 +618,14 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         List<String> results = new ArrayList<>();
         String filteredKey = key.startsWith("@") ? key.substring(2) : key;
 
+        // check existence of the key
+        if (!jsonObject.has(key)) {
+            return results;
+        }
+
         if (!filteredKey.endsWith("[:]")) {
             // it is not an array
-            results.add(jsonObject.getString(filteredKey));
+            results.add(String.valueOf(jsonObject.get(key)));
             return results;
         }
 
