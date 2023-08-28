@@ -130,11 +130,10 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         importSets = new ArrayList<>();
         List<HierarchicalConfiguration> mappings = config.configurationsAt("importSet");
         for (HierarchicalConfiguration node : mappings) {
-            String settitle = node.getString("[@title]", "-");
             String source = node.getString("[@source]", "-");
             String target = node.getString("[@target]", "-");
             boolean person = node.getBoolean("[@person]", false);
-            importSets.add(new ImportSet(settitle, source, target, person));
+            importSets.add(new ImportSet(source, target, person));
         }
         
         // initialize importGroupSets
@@ -147,11 +146,10 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             // add elements to the group
             List<HierarchicalConfiguration> elementsMappings = groupConfig.configurationsAt("importSet");
             for (HierarchicalConfiguration node : elementsMappings) {
-                String elementTitle = node.getString("[@title]", "-");
                 String elementSource = node.getString("[@source]", "-");
                 String elementTarget = node.getString("[@target]", "-");
                 boolean person = node.getBoolean("[@person]", false);
-                groupSet.addElement(new ImportSet(elementTitle, elementSource, elementTarget, person));
+                groupSet.addElement(new ImportSet(elementSource, elementTarget, person));
             }
             importGroupSets.add(groupSet);
         }
@@ -166,11 +164,10 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             // add elements to the group
             List<HierarchicalConfiguration> elementsMappings = childConfig.configurationsAt("importSet");
             for (HierarchicalConfiguration node : elementsMappings) {
-                String elementTitle = node.getString("[@title]", "-");
                 String elementSource = node.getString("[@source]", "-");
                 String elementTarget = node.getString("[@target]", "-");
                 boolean person = node.getBoolean("[@person]", false);
-                childStruct.addElement(new ImportSet(elementTitle, elementSource, elementTarget, person));
+                childStruct.addElement(new ImportSet(elementSource, elementTarget, person));
             }
             importChildDocStructs.add(childStruct);
         }
@@ -188,11 +185,8 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
 
     /**
      * main method to start the actual import
-     * 
-     * @param importConfiguration
      */
-    public void startImport(ImportSet importset) {
-    	updateLog("Start import for: " + importset.getTitle());
+    public void startImport() {
         progress = 0;
         BeanHelper bhelp = new BeanHelper();
         
@@ -674,7 +668,6 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     @Data
     @AllArgsConstructor
     public class ImportSet {
-        private String title;
         private String source;
         private String target;
         private boolean person;

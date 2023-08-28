@@ -101,18 +101,16 @@
                                                         <h:outputText styleClass="margin-right-5" value="#{msgs.plugin_intranda_workflow_sample_startImport}" />
                                                         <span class="caret"></span>
                                                     </a>
-                                        
+                                                    
                                                     <ul class="dropdown-menu">
-                                                        <ui:repeat
-                                                            var="importset"
-                                                            value="#{NavigationForm.workflowPlugin.importSets}">
-                                                            <li><button jsf:action="#{NavigationForm.workflowPlugin.startImport(importset)}"
-                                                                    aria-label="#{importset.title}" class="dropdown-item">
-                                                                    <h:outputText value="#{importset.title}" />
-                                                                </button>
-                                                            </li>
-                                                        </ui:repeat>
+                                                        <li>
+                                                            <button jsf:action="#{NavigationForm.workflowPlugin.startImport}"
+                                                                          aria-label="start import" class="dropdown-item">
+                                                                <h:outputText value="Start Import" />
+                                                            </button>
+                                                        </li>
                                                     </ul>
+                                                    
                                                 </div>
 
                                                 <!-- Cancel button -->
