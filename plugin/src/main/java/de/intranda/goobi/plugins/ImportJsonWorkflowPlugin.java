@@ -89,6 +89,8 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     private String urlMetadata;
     private String imageExtension = ".jpg";
 
+    private HierarchicalConfiguration partnerUrlConfig;
+
     private StorageProviderInterface storageProvider = StorageProvider.getInstance();
 
     @Override
@@ -126,6 +128,9 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         jsonFolder = config.getString("jsonFolder");
         urlMetadata = config.getString("urlMetadata", "");
         
+        // configuration block for partner url
+        partnerUrlConfig = config.configurationAt("partnerUrl");
+
         // read list of mapping configuration
         importSets = new ArrayList<>();
         List<HierarchicalConfiguration> mappings = config.configurationsAt("importSet");
@@ -341,6 +346,9 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             // create metadata fields 
             createMetadataFields(prefs, logical, jsonObject, this.importSets);
 
+            // create metadata for partner url
+            createMetadataPartnerUrl(prefs, logical, jsonObject);
+
             // create MetadataGroups
             createMetadataGroups(prefs, logical, jsonObject);
 
@@ -431,6 +439,59 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 }
             }
         }
+    }
+
+    private void createMetadataPartnerUrl(Prefs prefs, DocStruct ds, JSONObject jsonObject) {
+        String partnerUrl = getPartnerUrl(partnerUrlConfig, jsonObject);
+        log.debug("partnerUrl = " + partnerUrl);
+        String partnerUrlType = partnerUrlConfig.getString("urlMetadata");
+        log.debug("partnerUrlType = " + partnerUrlType);
+        MetadataType urlType = prefs.getMetadataTypeByName(partnerUrlType);
+        try {
+            // we don't want to download from this url, hence the second false
+            Metadata md = createMetadata(urlType, partnerUrl, false, false);
+            updateLog("Add metadata '" + partnerUrlType + "' with value '" + partnerUrl + "'");
+            ds.addMetadata(md);
+        } catch (MetadataTypeNotAllowedException e) {
+            String message = "MetadataType " + partnerUrlType + " is not allowed. Skipping...";
+            reportError(message);
+        }
+    }
+
+    private String getPartnerUrl(HierarchicalConfiguration partnerUrlConfig, JSONObject jsonObject) {
+        boolean shouldSave = partnerUrlConfig.getBoolean("[@save]");
+        if (!shouldSave) {
+            return "";
+        }
+        // otherwise create the string
+        String urlBase = partnerUrlConfig.getString("urlBase", "");
+        String[] urlParts = partnerUrlConfig.getStringArray("urlPart");
+        String urlTail = partnerUrlConfig.getString("urlTail");
+        return createPartnerUrl(urlBase, urlParts, urlTail, jsonObject);
+    }
+
+    private String createPartnerUrl(String urlBase, String[] urlParts, String urlTail, JSONObject jsonObject) {
+        log.debug("starting to create partner url");
+        StringBuilder sb = new StringBuilder(urlBase);
+        if (!urlBase.endsWith("/")) {
+            sb.append("/");
+        }
+        for (String urlPart : urlParts) {
+            List<String> values = getValuesFromEasySource(urlPart, jsonObject);
+            for (String value : values) {
+                sb.append(value);
+                if (!value.endsWith("/")) {
+                    sb.append("/");
+                }
+            }
+        }
+
+        sb.append(urlTail);
+        if (!urlTail.endsWith("/")) {
+            sb.append("/");
+        }
+
+        return sb.toString();
     }
 
     private Metadata createMetadata(MetadataType targetType, String value, boolean isPerson, boolean isUrl) throws MetadataTypeNotAllowedException {
