@@ -150,7 +150,11 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         for (HierarchicalConfiguration groupConfig : groupMappings) {
             String source = groupConfig.getString("[@source]", "-");
             String type = groupConfig.getString("[@type]", "-");
-            ImportGroupSet groupSet = new ImportGroupSet(source, type);
+            String alternativeType = groupConfig.getString("[@altType]", "");
+            String filteringKey = groupConfig.getString("[@key]", "");
+            String filteringValue = groupConfig.getString("[@value]", "");
+            String filteringMethod = groupConfig.getString("[@method]", "");
+            ImportGroupSet groupSet = new ImportGroupSet(source, type, alternativeType, filteringKey, filteringValue, filteringMethod);
             // add elements to the group
             List<HierarchicalConfiguration> elementsMappings = groupConfig.configurationsAt("importSet");
             for (HierarchicalConfiguration node : elementsMappings) {
@@ -168,7 +172,10 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         for (HierarchicalConfiguration childConfig : childMappings) {
             String source = childConfig.getString("[@source]", "-");
             String type = childConfig.getString("[@type]", "-");
-            ImportChildDocStruct childStruct = new ImportChildDocStruct(source, type);
+            String filteringKey = childConfig.getString("[@key]", "");
+            String filteringValue = childConfig.getString("[@value]", "");
+            String filteringMethod = childConfig.getString("[@method]", "");
+            ImportChildDocStruct childStruct = new ImportChildDocStruct(source, type, filteringKey, filteringValue, filteringMethod);
             // add elements to the group
             List<HierarchicalConfiguration> elementsMappings = childConfig.configurationsAt("importSet");
             for (HierarchicalConfiguration node : elementsMappings) {
@@ -592,20 +599,26 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             List<ImportSet> elements = group.getElements();
             log.debug("group has " + elements.size() + " elements");
 
-            //create and add the MetadataGroup
+            // items needed by the filtering logic
+            String alternativeType = group.getAlternativeType();
+            String filteringKey = group.getFilteringKey();
+            String filteringValue = group.getFilteringValue();
+            String filteringMethod = group.getFilteringMethod();
+
+            //prepare metadata group type and an alternative type
             MetadataGroupType groupType = prefs.getMetadataGroupTypeByName(type);
-            log.debug("groupType = " + groupType);
+            MetadataGroupType alternativeGroupType = prefs.getMetadataGroupTypeByName(alternativeType);
 
             JSONObject tempObject = getDirectParentOfLeafObject(groupSource, jsonObject);
             String arrayName = groupSource.substring(groupSource.lastIndexOf(".") + 1);
             log.debug("arrayName = " + arrayName);
             JSONArray elementsArray = tempObject.getJSONArray(arrayName);
-            // process every JSONObject in this JSONArray
-            log.debug("elementsArray has length = " + elementsArray.length());
+            // every JSONObject of this JSONArray should become a metadata group
             for (int k = 0; k < elementsArray.length(); ++k) {
-                // every element of the elementsArray is a metadata group
-                MetadataGroup mdGroup = new MetadataGroup(groupType);
                 JSONObject elementObject = elementsArray.getJSONObject(k);
+                // check elementObject to see whether we should use the alternative group type
+                boolean useOriginalType = isFilteringLogicPassed(elementObject, filteringKey, filteringValue, filteringMethod);
+                MetadataGroup mdGroup = useOriginalType ? new MetadataGroup(groupType) : new MetadataGroup(alternativeGroupType);
 
                 for (ImportSet element : elements) {
                     // every element should be a metadata in this metadata group
@@ -628,6 +641,28 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         }
     }
 
+    private boolean isFilteringLogicPassed(JSONObject jsonObject, String filteringKey, String filteringValue, String filteringMethod) {
+        if (StringUtils.isBlank(filteringKey)) {
+            return true;
+        }
+        String value = String.valueOf(jsonObject.get(filteringKey));
+        switch (filteringMethod) {
+            case "is":
+                return value.equals(filteringValue);
+            case "not":
+                return !value.equals(filteringValue);
+            case "startsWith":
+                return value.startsWith(filteringValue);
+            case "endsWith":
+                return value.endsWith(filteringValue);
+            case "contains":
+                return value.contains(filteringValue);
+            default:
+                // unrecognized method
+                return true;
+        }
+    }
+
     private void createChildDocStructs(Prefs prefs, DocStruct ds, JSONObject jsonObject, DigitalDocument dd) {
         log.debug("creating children DocStructs");
         log.debug("importChildDocStructs has length = " + importChildDocStructs.size());
@@ -636,6 +671,11 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             String structType = struct.getType();
             log.debug("structSource = " + structSource);
             log.debug("structType = " + structType);
+
+            // items needed by the filtering logic
+            String filteringKey = struct.getFilteringKey();
+            String filteringValue = struct.getFilteringValue();
+            String filteringMethod = struct.getFilteringMethod();
 
             List<ImportSet> childImportSets = struct.getElements();
             
@@ -647,6 +687,12 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             for (int k = 0; k < elementsArray.length(); ++k) {
                 // every sub-element should be a child DocStruct
                 JSONObject elementObject = elementsArray.getJSONObject(k);
+                boolean addThisStruct = isFilteringLogicPassed(elementObject, filteringKey, filteringValue, filteringMethod);
+                if (!addThisStruct) {
+                    String message = "The configured filtering logic did not pass, child No." + String.valueOf(k + 1) + " will not be created.";
+                    updateLog(message);
+                    continue;
+                }
                 try {
                     DocStruct childStruct = dd.createDocStruct(prefs.getDocStrctTypeByName(structType));
                     ds.addChild(childStruct);
@@ -770,11 +816,40 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     public class ImportGroupSet {
         private String source;
         private String type;
+        private String alternativeType = "";
+        private String filteringKey = "";
+        private String filteringValue = "";
+        private String filteringMethod = "is";
         private List<ImportSet> elements;
 
         public ImportGroupSet(String source, String type) {
             this.source = source;
             this.type = type;
+            this.elements = new ArrayList<>();
+        }
+
+        public ImportGroupSet(String source, String type, String altType, String key, String value, String method) {
+            this.source = source;
+            this.type = type;
+            this.alternativeType = altType;
+            this.filteringKey = key;
+            this.filteringValue = value;
+            switch (method) {
+                case "not":
+                    this.filteringMethod = "not";
+                    break;
+                case "startsWith":
+                    this.filteringMethod = "startsWith";
+                    break;
+                case "endsWith":
+                    this.filteringMethod = "endsWith";
+                    break;
+                case "contains":
+                    this.filteringMethod = "contains";
+                    break;
+                default:
+                    // otherwise do nothing, use default method "is"
+            }
             this.elements = new ArrayList<>();
         }
 
@@ -787,11 +862,38 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     public class ImportChildDocStruct {
         private String source;
         private String type;
+        private String filteringKey = "";
+        private String filteringValue = "";
+        private String filteringMethod = "is";
         private List<ImportSet> elements;
 
         public ImportChildDocStruct(String source, String type) {
             this.source = source;
             this.type = type;
+            this.elements = new ArrayList<>();
+        }
+
+        public ImportChildDocStruct(String source, String type, String key, String value, String method) {
+            this.source = source;
+            this.type = type;
+            this.filteringKey = key;
+            this.filteringValue = value;
+            switch (method) {
+                case "not":
+                    this.filteringMethod = "not";
+                    break;
+                case "startsWith":
+                    this.filteringMethod = "startsWith";
+                    break;
+                case "endsWith":
+                    this.filteringMethod = "endsWith";
+                    break;
+                case "contains":
+                    this.filteringMethod = "contains";
+                    break;
+                default:
+                    // otherwise do nothing, use default method "is"
+            }
             this.elements = new ArrayList<>();
         }
 
