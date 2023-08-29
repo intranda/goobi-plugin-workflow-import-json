@@ -48,6 +48,8 @@ import ugh.dl.DigitalDocument;
 import ugh.dl.DocStruct;
 import ugh.dl.Fileformat;
 import ugh.dl.Metadata;
+import ugh.dl.MetadataGroup;
+import ugh.dl.MetadataGroupType;
 import ugh.dl.MetadataType;
 import ugh.dl.Person;
 import ugh.dl.Prefs;
@@ -503,11 +505,19 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             String lastName = value.substring(splitIndex);
             p.setFirstname(firstName);
             p.setLastname(lastName);
+
+            // role
+            // id
+            // displayName
+            // displayDate?
+            // displayText?
+
             return p;
         }
 
         Metadata md = new Metadata(targetType);
         md.setValue(value);
+
         if (isUrl) {
             // download the image from the url to the importFolder
             downloadImage(value, importFolder);
@@ -565,7 +575,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         return imageName;
     }
 
-    private void createMetadataGroups(Prefs prefs, DocStruct ds, JSONObject jsonObject) {
+    private void createMetadataGroups(Prefs prefs, DocStruct ds, JSONObject jsonObject) throws MetadataTypeNotAllowedException {
         log.debug("creating metadata groups");
         for (ImportGroupSet group : importGroupSets) {
             String groupSource = group.getSource();
@@ -575,32 +585,37 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             List<ImportSet> elements = group.getElements();
             log.debug("group has " + elements.size() + " elements");
 
-            // create and add the MetadataGroup
-            //            MetadataGroupType groupType = prefs.getMetadataGroupTypeByName(type);
-            //            MetadataGroup mdGroup = new MetadataGroup(groupType);
-            //            ds.addMetadataGroup(mdGroup);
+            //create and add the MetadataGroup
+            MetadataGroupType groupType = prefs.getMetadataGroupTypeByName(type);
 
             JSONObject tempObject = getDirectParentOfLeafObject(groupSource, jsonObject);
             String arrayName = groupSource.substring(groupSource.lastIndexOf(".") + 1);
             log.debug("arrayName = " + arrayName);
             JSONArray elementsArray = tempObject.getJSONArray(arrayName);
             // process every JSONObject in this JSONArray
+            log.debug("elementsArray has length = " + elementsArray.length());
             for (int k = 0; k < elementsArray.length(); ++k) {
+                MetadataGroup mdGroup = new MetadataGroup(groupType);
                 JSONObject elementObject = elementsArray.getJSONObject(k);
                 // every sub-element should be a DocStruct
                 for (ImportSet element : elements) {
                     log.debug(element);
                     String elementSource = element.getSource();
-                    String elementType = element.getTarget();
+                    String elementTypeName = element.getTarget();
                     log.debug("elementSource = " + elementSource);
-                    log.debug("elementType = " + elementType);
+                    log.debug("elementTypeName = " + elementTypeName);
+                    MetadataType elementType = prefs.getMetadataTypeByName(elementTypeName);
                     List<String> values = getValuesFromJsonObject(elementSource, elementObject);
                     for (String value : values) {
                         // for every value create a Metadata of that value
                         log.debug("value = " + value);
+                        Metadata md = createMetadata(elementType, value, false, false);
+                        mdGroup.addMetadata(md);
                     }
                 }
+                ds.addMetadataGroup(mdGroup);
             }
+
         }
     }
 
@@ -674,19 +689,19 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         String filteredKey = key.startsWith("@") ? key.substring(2) : key;
 
         // check existence of the key
-        if (!jsonObject.has(key)) {
+        if (!jsonObject.has(filteredKey)) {
             return results;
         }
 
         if (!filteredKey.endsWith("[:]")) {
             // it is not an array
-            results.add(String.valueOf(jsonObject.get(key)));
+            results.add(String.valueOf(jsonObject.get(filteredKey)));
             return results;
         }
 
         // it is an array
         // remove the tailing [:]
-        String arrayName = filteredKey.substring(0, key.length() - 3);
+        String arrayName = filteredKey.substring(0, filteredKey.length() - 3);
         JSONArray jsonArray = jsonObject.getJSONArray(arrayName);
         for (int i = 0; i < jsonArray.length(); ++i) {
             String value = jsonArray.getString(i);
