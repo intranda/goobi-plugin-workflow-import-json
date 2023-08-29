@@ -595,10 +595,12 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             // process every JSONObject in this JSONArray
             log.debug("elementsArray has length = " + elementsArray.length());
             for (int k = 0; k < elementsArray.length(); ++k) {
+                // every element of the elementsArray is a metadata group
                 MetadataGroup mdGroup = new MetadataGroup(groupType);
                 JSONObject elementObject = elementsArray.getJSONObject(k);
-                // every sub-element should be a DocStruct
+
                 for (ImportSet element : elements) {
+                    // every element should be a metadata in this metadata group
                     log.debug(element);
                     String elementSource = element.getSource();
                     String elementTypeName = element.getTarget();
@@ -615,7 +617,6 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 }
                 ds.addMetadataGroup(mdGroup);
             }
-
         }
     }
 
