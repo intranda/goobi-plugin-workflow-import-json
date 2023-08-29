@@ -19,6 +19,7 @@ import org.apache.commons.collections4.queue.CircularFifoQueue;
 import org.apache.commons.compress.utils.IOUtils;
 import org.apache.commons.configuration.HierarchicalConfiguration;
 import org.apache.commons.configuration.XMLConfiguration;
+import org.apache.commons.lang3.StringUtils;
 import org.goobi.beans.Process;
 import org.goobi.beans.Step;
 import org.goobi.production.enums.PluginType;
@@ -418,6 +419,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             // retrieve the value from the configured jsonPath
             String source = importSet.getSource();
             List<String> values = getValuesFromEasySource(source, jsonObject);
+
             // prepare the MetadataType
             String target = importSet.getTarget();
             MetadataType targetType = prefs.getMetadataTypeByName(target);
@@ -438,6 +440,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 } catch (MetadataTypeNotAllowedException e) {
                     String message = "MetadataType " + target + " is not allowed. Skipping...";
                     reportError(message);
+                    e.printStackTrace();
                 }
             }
         }
@@ -448,6 +451,10 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         log.debug("partnerUrl = " + partnerUrl);
         String partnerUrlType = partnerUrlConfig.getString("urlMetadata");
         log.debug("partnerUrlType = " + partnerUrlType);
+        if (StringUtils.isAnyBlank(partnerUrl, partnerUrlType)) {
+            // no valid partner url or no specified metadata
+            return;
+        }
         MetadataType urlType = prefs.getMetadataTypeByName(partnerUrlType);
         try {
             // we don't want to download from this url, hence the second false
@@ -587,6 +594,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
 
             //create and add the MetadataGroup
             MetadataGroupType groupType = prefs.getMetadataGroupTypeByName(type);
+            log.debug("groupType = " + groupType);
 
             JSONObject tempObject = getDirectParentOfLeafObject(groupSource, jsonObject);
             String arrayName = groupSource.substring(groupSource.lastIndexOf(".") + 1);
@@ -690,7 +698,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         String filteredKey = key.startsWith("@") ? key.substring(2) : key;
 
         // check existence of the key
-        if (!jsonObject.has(filteredKey)) {
+        if (!jsonObject.has(filteredKey) && !filteredKey.endsWith("[:]")) {
             return results;
         }
 
@@ -702,10 +710,14 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
 
         // it is an array
         // remove the tailing [:]
+        log.debug("tailing [:] encountered");
         String arrayName = filteredKey.substring(0, filteredKey.length() - 3);
+        log.debug("arrayName = " + arrayName);
         JSONArray jsonArray = jsonObject.getJSONArray(arrayName);
+        log.debug("jsonArray has length = " + jsonArray.length());
         for (int i = 0; i < jsonArray.length(); ++i) {
             String value = jsonArray.getString(i);
+            log.debug("value in jsonArray = " + value);
             results.add(value);
         }
 
