@@ -11,8 +11,10 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Queue;
+import java.util.Set;
 import java.util.UUID;
 
 import org.apache.commons.collections4.queue.CircularFifoQueue;
@@ -89,7 +91,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     
     private String jsonFolder;
 
-    private String urlMetadata;
+    private Set<String> downloadableUrlSet = new HashSet<>();
     private String imageExtension = ".jpg";
 
     private HierarchicalConfiguration partnerUrlConfig;
@@ -129,8 +131,10 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         workflow = config.getString("workflow");
         publicationType = config.getString("publicationType");
         jsonFolder = config.getString("jsonFolder");
-        urlMetadata = config.getString("urlMetadata", "");
-        
+        String[] downloadableUrls = config.getStringArray("downloadableUrl");
+        for (String url : downloadableUrls) {
+            downloadableUrlSet.add(url);
+        }
         // configuration block for partner url
         partnerUrlConfig = config.configurationAt("partnerUrl");
 
@@ -430,13 +434,13 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             // prepare the MetadataType
             String target = importSet.getTarget();
             MetadataType targetType = prefs.getMetadataTypeByName(target);
-            boolean isUrl = urlMetadata.equals(target);
+            boolean isDownloadableUrl = downloadableUrlSet.contains(target);
 
             boolean isPerson = importSet.isPerson();
 
             for (String value : values) {
                 try {
-                    Metadata md = createMetadata(targetType, value, isPerson, isUrl);
+                    Metadata md = createMetadata(targetType, value, isPerson, isDownloadableUrl);
                     if (isPerson) {
                         updateLog("Add person '" + target + "' with value '" + value + "'");
                         ds.addPerson((Person) md);
@@ -510,7 +514,8 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         return sb.toString();
     }
 
-    private Metadata createMetadata(MetadataType targetType, String value, boolean isPerson, boolean isUrl) throws MetadataTypeNotAllowedException {
+    private Metadata createMetadata(MetadataType targetType, String value, boolean isPerson, boolean isDownloadableUrl)
+            throws MetadataTypeNotAllowedException {
         // treat persons different than regular metadata
         if (isPerson) {
             Person p = new Person(targetType);
@@ -532,7 +537,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         Metadata md = new Metadata(targetType);
         md.setValue(value);
 
-        if (isUrl) {
+        if (isDownloadableUrl) {
             // download the image from the url to the importFolder
             downloadImage(value, importFolder);
         }
