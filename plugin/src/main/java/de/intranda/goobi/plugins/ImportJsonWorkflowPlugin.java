@@ -85,12 +85,15 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     int itemsTotal = 0;
     @Getter
     private Queue<LogMessage> logQueue = new CircularFifoQueue<>(48);
+    // folder used to hold the downloaded images temporarily
     private String importFolder;
+    // workflow template that is to be used
     private String workflow;
-    private String publicationType;
-    
-    private String jsonFolder;
 
+    private String publicationType;
+    // folder that contains the json files
+    private String jsonFolder;
+    // Set of names of the MetadataTypes that are configured to contain downloadable resources
     private Set<String> downloadableUrlSet = new HashSet<>();
     private String imageExtension = ".jpg";
 
@@ -273,6 +276,11 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         this.pusher = pusher;
     }
 	
+    /**
+     * create the title for the new process
+     * 
+     * @return new process title
+     */
     private String createProcessName() {
         // create a process name via UUID
         String processName = UUID.randomUUID().toString();
@@ -290,6 +298,12 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         return processName;
     }
     
+    /**
+     * get JSONObject of the input JSON file
+     * 
+     * @param jsonFile path to the json file
+     * @return JSONObject
+     */
     private JSONObject getJsonObjectFromJsonFile(Path jsonFile) {
         try (InputStream inputStream = storageProvider.newInputStream(jsonFile)) {
             // save the file's contents into a string
@@ -304,6 +318,14 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         }
     }
 
+    /**
+     * try to create and save a new process
+     * 
+     * @param bhelp BeanHelper
+     * @param processName title of the new process
+     * @param jsonObject JSONObject
+     * @return true if a new process is successfully created and saved, otherwise false
+     */
     private boolean tryCreateAndSaveNewProcess(BeanHelper bhelp, String processName, JSONObject jsonObject) {
         // get the correct workflow to use
         Process template = ProcessManager.getProcessByExactTitle(workflow);
@@ -338,6 +360,13 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         return true;
     }
 
+    /**
+     * prepare the Fileformat for creating the new process
+     * 
+     * @param template Process template
+     * @param jsonObject
+     * @return Fileformat
+     */
     private Fileformat prepareFileformatForNewProcess(Process template, JSONObject jsonObject) {
         Prefs prefs = template.getRegelsatz().getPreferences();
         try {
@@ -378,6 +407,15 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         }
     }
 
+    /**
+     * create and save the new process
+     * 
+     * @param bhelp BeanHelper
+     * @param template Process template
+     * @param processName title of the new process
+     * @param fileformat Fileformat
+     * @return the new process created
+     */
     private Process createAndSaveNewProcess(BeanHelper bhelp, Process template, String processName, Fileformat fileformat) {
         // save the process
         Process process = bhelp.createAndSaveNewProcess(template, processName, fileformat);
@@ -397,6 +435,14 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         return process;
     }
 
+    /**
+     * copy the images from importFolder to media folders of the process
+     * 
+     * @param process Process whose media folder is targeted
+     * @throws IOException
+     * @throws SwapException
+     * @throws DAOException
+     */
     private void copyMediaFiles(Process process) throws IOException, SwapException, DAOException {
         // if media files are given, import these into the media folder of the process
         updateLog("Start copying media files");
@@ -416,6 +462,11 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         storageProvider.deleteDataInDir(Path.of(importFolder));
     }
 
+    /**
+     * start all automatic tasks that are open
+     * 
+     * @param process
+     */
     private void startOpenAutomaticTasks(Process process) {
         // start any open automatic tasks for the created process
         for (Step s : process.getSchritteList()) {
@@ -426,11 +477,19 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         }
     }
 
+    /**
+     * create all metadata fields
+     * 
+     * @param prefs Prefs
+     * @param ds DocStruct
+     * @param jsonObject
+     * @param importSets list of ImportSet
+     */
     private void createMetadataFields(Prefs prefs, DocStruct ds, JSONObject jsonObject, List<ImportSet> importSets) {
         for (ImportSet importSet : importSets) {
             // retrieve the value from the configured jsonPath
             String source = importSet.getSource();
-            List<String> values = getValuesFromEasySource(source, jsonObject);
+            List<String> values = getValuesFromSource(source, jsonObject);
 
             // prepare the MetadataType
             String target = importSet.getTarget();
@@ -460,6 +519,13 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         }
     }
 
+    /**
+     * create the metadata specifically for the configured partner url
+     * 
+     * @param prefs Prefs
+     * @param ds DocStruct
+     * @param jsonObject
+     */
     private void createMetadataPartnerUrl(Prefs prefs, DocStruct ds, JSONObject jsonObject) {
         String partnerUrl = getPartnerUrl(partnerUrlConfig, jsonObject);
         log.debug("partnerUrl = " + partnerUrl);
@@ -481,6 +547,13 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         }
     }
 
+    /**
+     * get the value of the partner url
+     * 
+     * @param partnerUrlConfig
+     * @param jsonObject
+     * @return the value of the partner url as a string
+     */
     private String getPartnerUrl(HierarchicalConfiguration partnerUrlConfig, JSONObject jsonObject) {
         boolean shouldSave = partnerUrlConfig.getBoolean("[@save]");
         if (!shouldSave) {
@@ -493,6 +566,15 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         return createPartnerUrl(urlBase, urlParts, urlTail, jsonObject);
     }
 
+    /**
+     * create the value of the partner url based on the url base, several parts and a tail
+     * 
+     * @param urlBase starting part of the url
+     * @param urlParts multiple parts of the url following base
+     * @param urlTail ending part of the url
+     * @param jsonObject
+     * @return {urlBase}/{urlPart_1}/{urlPart_2}/.../{urlTail}
+     */
     private String createPartnerUrl(String urlBase, String[] urlParts, String urlTail, JSONObject jsonObject) {
         log.debug("starting to create partner url");
         StringBuilder sb = new StringBuilder(urlBase);
@@ -500,7 +582,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             sb.append("/");
         }
         for (String urlPart : urlParts) {
-            List<String> values = getValuesFromEasySource(urlPart, jsonObject);
+            List<String> values = getValuesFromSource(urlPart, jsonObject);
             for (String value : values) {
                 sb.append(value);
                 if (!value.endsWith("/")) {
@@ -517,6 +599,16 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         return sb.toString();
     }
 
+    /**
+     * create Metadata
+     * 
+     * @param targetType MetadataType
+     * @param value value of the new Metadata
+     * @param isPerson
+     * @param isDownloadableUrl
+     * @return the new Metadata object created
+     * @throws MetadataTypeNotAllowedException
+     */
     private Metadata createMetadata(MetadataType targetType, String value, boolean isPerson, boolean isDownloadableUrl)
             throws MetadataTypeNotAllowedException {
         // treat persons different than regular metadata
@@ -591,6 +683,14 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         return imageName;
     }
 
+    /**
+     * create MetadataGroups
+     * 
+     * @param prefs Prefs
+     * @param ds DocStruct
+     * @param jsonObject
+     * @throws MetadataTypeNotAllowedException
+     */
     private void createMetadataGroups(Prefs prefs, DocStruct ds, JSONObject jsonObject) throws MetadataTypeNotAllowedException {
         log.debug("creating metadata groups");
         for (ImportGroupSet group : importGroupSets) {
@@ -643,6 +743,15 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         }
     }
 
+    /**
+     * check whether the filtering logic configured for MetadataGroups and children DocStructs could pass
+     * 
+     * @param jsonObject
+     * @param filteringKey key of the JSONObject's item that should be checked
+     * @param filteringValue value that should be compared
+     * @param filteringMethod how should the values be compared
+     * @return true if the filtering logic could pass, i.e. the value satisfies the expectation, otherwise false
+     */
     private boolean isFilteringLogicPassed(JSONObject jsonObject, String filteringKey, String filteringValue, String filteringMethod) {
         if (StringUtils.isBlank(filteringKey)) {
             return true;
@@ -665,6 +774,14 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         }
     }
 
+    /**
+     * create all children DocStructs
+     * 
+     * @param prefs Prefs
+     * @param ds DocStruct
+     * @param jsonObject
+     * @param dd DigitalDocument
+     */
     private void createChildDocStructs(Prefs prefs, DocStruct ds, JSONObject jsonObject, DigitalDocument dd) {
         log.debug("creating children DocStructs");
         log.debug("importChildDocStructs has length = " + importChildDocStructs.size());
@@ -709,7 +826,14 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         }
     }
 
-    private List<String> getValuesFromEasySource(String source, JSONObject jsonObject) {
+    /**
+     * get values from the configured json path
+     * 
+     * @param source configured json path
+     * @param jsonObject
+     * @return list of string values
+     */
+    private List<String> getValuesFromSource(String source, JSONObject jsonObject) {
         List<String> results = new ArrayList<>();
         // for source paths indicating jsonPaths, it should start with $. or with @.
         if (!source.startsWith("$") && !source.startsWith("@")) {
@@ -726,6 +850,13 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         return getValuesFromJsonObject(key, tempObject);
     }
 
+    /**
+     * get to the direct parent of the leaf object
+     * 
+     * @param source json path
+     * @param jsonObject
+     * @return the direct parent of the leaf object as JSONObject
+     */
     private JSONObject getDirectParentOfLeafObject(String source, JSONObject jsonObject) {
         String[] paths = source.split("\\.");
         JSONObject tempObject = jsonObject;
@@ -738,6 +869,13 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         return tempObject;
     }
 
+    /**
+     * get values from the JSONObject
+     * 
+     * @param key
+     * @param jsonObject
+     * @return list of string values
+     */
     private List<String> getValuesFromJsonObject(String key, JSONObject jsonObject) {
         // suppose from now on our jsonObject is the one that is the direct parent of some leaf nodes
         // i.e. source will not start with $
@@ -773,6 +911,11 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         return results;
     }
 
+    /**
+     * report error
+     * 
+     * @param message error message
+     */
     private void reportError(String message) {
         log.error(message);
         updateLog(message, 3);
