@@ -1,19 +1,53 @@
 <config_plugin>
-	
-	<!-- import set existing of excel files and pdf files -->
-	<importSet title="a" source="Source Field A" target="TitleDocMain"/>
-	<importSet title="b" source="Source Field B" target="CatalogIDSource"/>
-	<importSet title="c" source="Source Field C" target="CatalogIDDigital"/>
-	<importSet title="d" source="Source Field D" target="shelfmarksource"/>
-	<importSet title="e" source="Max Mustermann" target="Author" person="true"/>
-	
-	<!-- which folder to use as import source -->
-	<importFolder>/opt/digiverso/import/sample/</importFolder>
+	<!-- folder that contains the json files -->
+	<jsonFolder>/opt/digiverso/g2g/workspace/demo_content/</jsonFolder>
+
+	<!-- folder used to hold the downloaded images temporarily -->
+	<importFolder>/opt/digiverso/g2g/workspace/workflow/tmp/</importFolder>
 	
 	<!-- which workflow to use -->
-	<workflow>Sample_Workflow</workflow>
+	<workflow>KHM_Giza_Import_Workflow</workflow>
 	
 	<!-- which publication type to use -->
-	<publicationType>Monograph</publicationType>
+	<publicationType>GizaDocument</publicationType>
 	
+	<!-- URL types that hold downloadable resources, could be none or multiple -->
+	<downloadableUrl>GizaPhotosMain</downloadableUrl>
+	<downloadableUrl>GizaPrimaryDisplayMain</downloadableUrl>
+	
+	<!-- whether or not to save the partner url, DEFAULT false -->
+	<partnerUrl save="true">
+		<!-- only one urlBase should be configured -->
+		<urlBase>giza.fas.harvard.edu</urlBase>
+		<!-- there could be multiple urlParts-->
+		<urlPart>$._type</urlPart>
+		<urlPart>$._id</urlPart>
+		<!-- only one urlTail should be configured -->
+		<urlTail>full</urlTail>
+		<!-- MetadataType that is to hold the value of the partner url -->
+		<urlMetadata>GizaPartnerUrl</urlMetadata>
+	</partnerUrl>
+
+	<importSet source="$._source.id" target="TitleDocMain" />
+	<!-- source that does not start with $ or @ will be regarded as value -->
+	<importSet source="Giza" target="singleDigCollection" />
+	<!-- source that ends with [:] is an array -->
+	<importSet source="$._source.allnumbers[:]" target="GizaAllNumbers" />
+	
+	<!-- group is for MetadataGroups, there could be multiple -->
+	<!-- no need to add the [:] -->
+	<group source="$._source.sitedates" type="GizaSiteDatesGroup">
+		<!-- source that starts with @ will be regarded as relative json path -->
+		<importSet source="@.type" target="GizaSiteDateType" />
+		<importSet source="@.date" target="GizaSiteDate" />
+	</group>
+	
+	<!-- child is for child DocStructs, there could be multiple -->
+	<!-- no need to add the [:] -->
+	<child source="$._source.relateditems.photos" type="GizaPhoto" key="number" value="KHM_AEOS_" method="startsWith">
+		<!-- same source could be used multiple times for different MetadataTypes -->
+		<importSet source="@.drs_id" target="GizaPhotosDrsId" />
+		<importSet source="@.drs_id" target="CatalogIDDigital" />
+	</child>
+
 </config_plugin>
