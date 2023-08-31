@@ -294,7 +294,6 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         try (InputStream inputStream = storageProvider.newInputStream(jsonFile)) {
             // save the file's contents into a string
             String result = new String(IOUtils.toByteArray(inputStream));
-            //            log.debug(result);
             // create a JSONObject from this json string
             return new JSONObject(result);
 
@@ -355,6 +354,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
 
             // add the logical basics
             DocStruct logical = dd.createDocStruct(prefs.getDocStrctTypeByName(publicationType));
+            log.debug("logical has type = " + logical.getType());
             dd.setLogicalDocStruct(logical);
 
             // create metadata fields 
@@ -413,6 +413,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 storageProvider.copyFile(path, targetPath);
             }
         }
+        storageProvider.deleteDataInDir(Path.of(importFolder));
     }
 
     private void startOpenAutomaticTasks(Process process) {
@@ -434,6 +435,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             // prepare the MetadataType
             String target = importSet.getTarget();
             MetadataType targetType = prefs.getMetadataTypeByName(target);
+            log.debug("targetType = " + targetType);
             boolean isDownloadableUrl = downloadableUrlSet.contains(target);
 
             boolean isPerson = importSet.isPerson();
@@ -446,6 +448,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                         ds.addPerson((Person) md);
                     } else {
                         updateLog("Add metadata '" + target + "' with value '" + value + "'");
+                        log.debug("ds.type = " + ds.getType());
                         ds.addMetadata(md);
                     }
                 } catch (MetadataTypeNotAllowedException e) {
@@ -524,12 +527,6 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             String lastName = value.substring(splitIndex);
             p.setFirstname(firstName);
             p.setLastname(lastName);
-
-            // role
-            // id
-            // displayName
-            // displayDate?
-            // displayText?
 
             return p;
         }
@@ -700,6 +697,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 }
                 try {
                     DocStruct childStruct = dd.createDocStruct(prefs.getDocStrctTypeByName(structType));
+                    log.debug("childStruct has type = " + childStruct.getType());
                     ds.addChild(childStruct);
                     // create metadata fields to the child DocStruct
                     createMetadataFields(prefs, childStruct, elementObject, childImportSets);
