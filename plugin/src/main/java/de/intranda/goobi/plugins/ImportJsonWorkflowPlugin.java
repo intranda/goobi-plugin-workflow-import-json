@@ -400,16 +400,16 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     private void copyMediaFiles(Process process) throws IOException, SwapException, DAOException {
         // if media files are given, import these into the media folder of the process
         updateLog("Start copying media files");
-        String targetBase = process.getImagesOrigDirectory(false);
         // prepare the directories
-        storageProvider.createDirectories(Path.of(targetBase));
+        String mediaBase = process.getImagesTifDirectory(false);
+        storageProvider.createDirectories(Path.of(mediaBase));
         List<Path> filesToImport = storageProvider.listFiles(importFolder);
         for (Path path : filesToImport) {
             File file = path.toFile();
             if (file.canRead()) {
                 String fileName = path.getFileName().toString();
                 log.debug("fileName = " + fileName);
-                Path targetPath = Path.of(targetBase, fileName);
+                Path targetPath = Path.of(mediaBase, fileName);
                 storageProvider.copyFile(path, targetPath);
             }
         }
