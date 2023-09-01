@@ -28,26 +28,26 @@
 		<urlMetadata>GizaPartnerUrl</urlMetadata>
 	</partnerUrl>
 
-	<importSet source="$._source.id" target="TitleDocMain" />
+	<metadata source="$._source.id" target="TitleDocMain" />
 	<!-- source that does not start with $ or @ will be regarded as value -->
-	<importSet source="Giza" target="singleDigCollection" />
+	<metadata source="Giza" target="singleDigCollection" />
 	<!-- source that ends with [:] is an array -->
-	<importSet source="$._source.allnumbers[:]" target="GizaAllNumbers" />
+	<metadata source="$._source.allnumbers[:]" target="GizaAllNumbers" />
 	
 	<!-- group is for MetadataGroups, there could be multiple -->
 	<!-- no need to add the [:] -->
 	<group source="$._source.sitedates" type="GizaSiteDatesGroup">
 		<!-- source that starts with @ will be regarded as relative json path -->
-		<importSet source="@.type" target="GizaSiteDateType" />
-		<importSet source="@.date" target="GizaSiteDate" />
+		<metadata source="@.type" target="GizaSiteDateType" />
+		<metadata source="@.date" target="GizaSiteDate" />
 	</group>
 	
 	<!-- child is for child DocStructs, there could be multiple -->
 	<!-- no need to add the [:] -->
 	<child source="$._source.relateditems.photos" type="GizaPhoto" key="number" value="KHM_AEOS_" method="startsWith">
 		<!-- same source could be used multiple times for different MetadataTypes -->
-		<importSet source="@.drs_id" target="GizaPhotosDrsId" />
-		<importSet source="@.drs_id" target="CatalogIDDigital" />
+		<metadata source="@.drs_id" target="GizaPhotosDrsId" />
+		<metadata source="@.drs_id" target="CatalogIDDigital" />
 	</child>
 
 </config_plugin>
