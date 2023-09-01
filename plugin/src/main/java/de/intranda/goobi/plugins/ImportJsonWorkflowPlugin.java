@@ -723,7 +723,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
 
             //prepare metadata group type and an alternative type
             MetadataGroupType groupType = prefs.getMetadataGroupTypeByName(type);
-            MetadataGroupType alternativeGroupType = prefs.getMetadataGroupTypeByName(alternativeType);
+            MetadataGroupType alternativeGroupType = getAlternativeMetadataGroupType(prefs, alternativeType);
 
             JSONObject tempObject = getDirectParentOfLeafObject(groupSource, jsonObject);
             String arrayName = groupSource.substring(groupSource.lastIndexOf(".") + 1);
@@ -738,7 +738,10 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 JSONObject elementObject = elementsArray.getJSONObject(k);
                 // check elementObject to see whether we should use the alternative group type
                 boolean useOriginalType = isFilteringLogicPassed(elementObject, filteringKey, filteringValue, filteringMethod);
-                MetadataGroup mdGroup = useOriginalType ? new MetadataGroup(groupType) : new MetadataGroup(alternativeGroupType);
+                MetadataGroup mdGroup = useOriginalType ? createMetadataGroup(groupType) : createMetadataGroup(alternativeGroupType);
+                if (mdGroup == null) {
+                    continue;
+                }
 
                 for (ImportMetadata element : elements) {
                     // every element should be a metadata in this metadata group
@@ -758,6 +761,38 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 }
                 ds.addMetadataGroup(mdGroup);
             }
+        }
+    }
+
+    /**
+     * get the alternative MetadataGroupType
+     * 
+     * @param prefs Prefs
+     * @param alternativeType name of the alternative MetadataGroupType
+     * @return the MetadataGroupType if it is found, otherwise null
+     */
+    private MetadataGroupType getAlternativeMetadataGroupType(Prefs prefs, String alternativeType) {
+        MetadataGroupType type = null;
+        try {
+            type = prefs.getMetadataGroupTypeByName(alternativeType);
+        } catch (Exception e) {
+            // no need to do anything
+        }
+
+        return type;
+    }
+
+    /**
+     * create a MetadataGroup based on the input MetadataGroupType
+     * 
+     * @param type MetadataGroupType
+     * @return a new MetadataGroup if it is successfully created, or null otherwise
+     */
+    private MetadataGroup createMetadataGroup(MetadataGroupType type) {
+        try {
+            return new MetadataGroup(type);
+        } catch (Exception e) {
+            return null;
         }
     }
 
