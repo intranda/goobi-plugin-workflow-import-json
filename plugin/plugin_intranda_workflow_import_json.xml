@@ -28,22 +28,44 @@
 		<urlMetadata>GizaPartnerUrl</urlMetadata>
 	</partnerUrl>
 
+	<!-- same source could be used multiple times for different MetadataTypes -->
 	<metadata source="$._source.id" target="TitleDocMain" />
+	<metadata source="$._source.id" target="CatalogIDDigital" />
 	<!-- source that does not start with $ or @ will be regarded as value -->
 	<metadata source="Giza" target="singleDigCollection" />
 	<!-- source that ends with [:] is an array -->
 	<metadata source="$._source.allnumbers[:]" target="GizaAllNumbers" />
 	
 	<!-- group is for MetadataGroups, there could be multiple -->
-	<!-- no need to add the [:] -->
+	<!-- no need to add the [:] to the end of @source -->
+	<!-- @type is the name of the MetadataGroupType -->
 	<group source="$._source.sitedates" type="GizaSiteDatesGroup">
 		<!-- source that starts with @ will be regarded as relative json path -->
 		<metadata source="@.type" target="GizaSiteDateType" />
 		<metadata source="@.date" target="GizaSiteDate" />
 	</group>
 	
+	<!-- @altType is the name of an alternative MetadataGroupType, which will be used to create another MetadataGroup for all items that are filtered out. OPTIONAL. -->
+	<!-- @key is the filtering key that is used to retrieve the value from the JSONObject. OPTIONAL. -->
+	<!-- @value is used to compare with the value retrieved from the JSONObject. OPTIONAL. DEFAULT "". -->
+	<!-- @method defines the logic for comparing values. Options are is, not, startsWith, endsWith, contains. OPTIONAL. DEFAULT 'is'. -->
+	<group source="$._source.relateditems.modernpeople" type="ModernPeopleGroup" altType="_ModernPeopleGroupHidden" key="role" value="Excavator" method="is">
+		<metadata source="@.role" target="GizaModernPeopleRole" />
+		<!-- same source could be used multiple times for different MetadataTypes -->
+		<metadata source="@.id" target="GizaModernPeopleId" />
+		<metadata source="@.id" target="GizaModernPeopleId2" />
+	</group>
+	
+	<!-- if no @altType is configured, then all items that are filtered out will not be imported. -->
+	<group source="$._source.relateditems.ancientpeople" type="AncientPeopleGroup" key="role" value="Tomb Owner">
+		<metadata source="@.role" target="GizaAncientPeopleRole" />
+		<metadata source="@.id" target="GizaAncientPeopleId" />
+	</group>
+	
 	<!-- child is for child DocStructs, there could be multiple -->
-	<!-- no need to add the [:] -->
+	<!-- no need to add the [:] to the end of @source-->
+	<!-- the attributes @key, @value, @method are the same as in group -->
+	<!-- there is NO @altType attribute for child, all items that are filtered out will not be imported -->
 	<child source="$._source.relateditems.photos" type="GizaPhoto" key="number" value="KHM_AEOS_" method="startsWith">
 		<!-- same source could be used multiple times for different MetadataTypes -->
 		<metadata source="@.drs_id" target="GizaPhotosDrsId" />
