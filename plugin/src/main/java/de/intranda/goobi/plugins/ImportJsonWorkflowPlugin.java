@@ -574,7 +574,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         // otherwise create the string
         String urlBase = partnerUrlConfig.getString("urlBase", "");
         String[] urlParts = partnerUrlConfig.getStringArray("urlPart");
-        String urlTail = partnerUrlConfig.getString("urlTail");
+        String urlTail = partnerUrlConfig.getString("urlTail", "");
         return createPartnerUrl(urlBase, urlParts, urlTail, jsonObject);
     }
 
@@ -603,9 +603,11 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             }
         }
 
-        sb.append(urlTail);
-        if (!urlTail.endsWith("/")) {
-            sb.append("/");
+        if (StringUtils.isNotBlank(urlTail)) {
+            sb.append(urlTail);
+            if (!urlTail.endsWith("/")) {
+                sb.append("/");
+            }
         }
 
         return sb.toString();

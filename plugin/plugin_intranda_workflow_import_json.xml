@@ -17,12 +17,12 @@
 	
 	<!-- whether or not to save the partner url, DEFAULT false -->
 	<partnerUrl save="true">
-		<!-- only one urlBase should be configured -->
+		<!-- at most one urlBase should be configured, DEFAULT "" -->
 		<urlBase>giza.fas.harvard.edu</urlBase>
 		<!-- there could be multiple urlParts-->
 		<urlPart>$._type</urlPart>
 		<urlPart>$._id</urlPart>
-		<!-- only one urlTail should be configured -->
+		<!-- at most one urlTail should be configured, DEFAULT "" -->
 		<urlTail>full</urlTail>
 		<!-- MetadataType that is to hold the value of the partner url -->
 		<urlMetadata>GizaPartnerUrl</urlMetadata>
