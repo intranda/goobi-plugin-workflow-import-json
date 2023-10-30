@@ -364,6 +364,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
      * prepare the Fileformat for creating the new process
      * 
      * @param template Process template
+     * @param processName title of the new process
      * @param jsonObject
      * @return Fileformat
      */
