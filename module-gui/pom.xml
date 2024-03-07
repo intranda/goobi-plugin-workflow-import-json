@@ -2,10 +2,10 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>io.goobi.workflow.plugin</groupId>
-    <artifactId>plugin-workflow-import_json</artifactId>
+    <artifactId>plugin-workflow-import-json</artifactId>
     <version>24.03-SNAPSHOT</version>
   </parent>
-  <artifactId>plugin-workflow-import_json-gui</artifactId>
+  <artifactId>plugin-workflow-import-json-gui</artifactId>
   <packaging>jar</packaging>
   <build>
     <resources>
