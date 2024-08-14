@@ -22,6 +22,8 @@ To configure how the plugin should behave, various values can be adjusted in the
 /opt/digiverso/goobi/config/plugin_intranda_workflow_import_json.xml
 ```
 
+![Selection of the Workflow plugin](screen1_en.png)
+
 ## Configuration
 The content of this configuration file is as follows:
 
