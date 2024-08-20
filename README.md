@@ -2,70 +2,38 @@
 
 <img src="https://goobi.io/wp-content/uploads/logo_goobi_plugin.png" align="right" style="margin:0 0 20px 20px;" alt="Plugin for Goobi workflow" width="175" height="109">
 
-This is the Sample Goobi workflow plugin. It is used as a reference implementation for future mass imports based on workflow plugins. It does contain a configuration file and a simple reference user interface.
+This Workflow plugin for Goobi workflow was developed for the KHM in Vienna and allows to do an import of metadata from JSON files to let Goobi processes be created. Its configuration is very generic and can be customized in detail to fit to other use cases. However adaptions might be needed for for other projects.
 
 This is a plugin for Goobi workflow, the open source workflow tracking software for digitisation projects. More information about Goobi workflow is available under https://goobi.io. If you want to get in touch with the user community simply go to https://community.goobi.io.
-
-## KICKSTART
-
-To start using this Sample Plugin as template, simply do the following:
-
-### Create the repository
-
-- Open https://gitea.intranda.com/repo/create to create a new repository
-- Select as template `goobi-workflow/goobi-plugin-workflow-sample`
-- Select as `Owner` the value `goobi-workflow`
-- Define a `Repository name` based on convention, e.g.  `goobi-plugin-workflow-myPlugin`
-- Click in `Template Item` the checkbox `Git Content (Default branch)`
-- Click on Button `Create Repository`
-
-### Checkout and rename project
-
-- Open Eclipse and checkout the new created Repository. You will find a new project with the name `A-goobi-plugin-workflow-sample` there.
-- Right-click on the new project and refactor/rename it to your plugin name, e.g. `goobi-plugin-workflow-myPlugin`
-- Open the ant file `build.xml` and define the plugin name there in the property `name`, e.g. replace `sample` with `myPlugin`
-- Save the ant file and right-click in the outline view on the target `rename` to start renaming all configuration files, java classes and GUI files
-- Right-click on the project and click `Refresh` to see the renaming results.
-
-### Update Readme file
-
-- The plugin is now created and ready to be used. Remember to commit your changes and don't forget to update the README.md file that is located on folder upwards of the eclipse project. As it does not get committed by Eclipse you can commit it with these commands:
-
-  ```
-  cd ~/git/goobi-plugin-workflow-myPlugin
-  git commit -am "updated readme"
-  git push
-  ```
 
 ## Plugin details
 
 More information about the functionality of this plugin and the complete documentation can be found in the central documentation area at https://docs.goobi.io
 
-Detail | Description
---- | ---
-**Plugin identifier**       | intranda_workflow_sample
-**Plugin type**             | Workflow plugin
-**Licence**                 | GPL 2.0 or newer  
-**Documentation (German)**  | - no documentation available -
-**Documentation (English)** | - no documentation available -
+Detail                      | Description
+--------------------------- | ----------------------
+**Plugin identifier**       | intranda_workflow_import_json
+**Plugin type**             | workflow
+**Licence**                 | GPL 2.0 or newer
+**Documentation (German)**  | https://docs.goobi.io/workflow-plugins/v/eng/workflow/goobi-plugin-workflow-import-json
+**Documentation (English)** | https://docs.goobi.io/workflow-plugins/v/ger/workflow/goobi-plugin-workflow-import-json
 
 ## Goobi details
 
 Goobi workflow is an open source web application to manage small and large digitisation projects mostly in cultural heritage institutions all around the world. More information about Goobi can be found here:
 
-Detail | Description
---- | ---
-**Goobi web site**  | https://www.goobi.io
-**Twitter**         | https://twitter.com/goobi
-**Goobi community** | https://community.goobi.io
+Detail                      | Description
+--------------------------- | ---------------------------
+**Goobi web site**          | https://www.goobi.io
+**Goobi community**         | https://community.goobi.io
+**Goobi documentation**     | https://docs.goobi.io
 
 ## Development
 
 This plugin was developed by intranda. If you have any issues, feedback, question or if you are looking for more information about Goobi workflow, Goobi viewer and all our other developments that are used in digitisation projects please get in touch with us.  
 
-Contact | Details
---- | ---
-**Company name**  | intranda GmbH
-**Address**       | Bertha-von-Suttner-Str. 9, 37085 Göttingen, Germany
-**Web site**      | https://www.intranda.com
-**Twitter**       | https://twitter.com/intranda
+Contact                     | Details
+--------------------------- | ----------------------------------------------------
+**Company name**            | intranda GmbH
+**Address**                 | Bertha-von-Suttner-Str. 9, 37085 Göttingen, Germany
+**Web site**                | https://www.intranda.com
