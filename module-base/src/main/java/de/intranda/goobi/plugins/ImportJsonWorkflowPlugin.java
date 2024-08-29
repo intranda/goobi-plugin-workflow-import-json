@@ -11,6 +11,7 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Queue;
@@ -67,13 +68,14 @@ import ugh.fileformats.mets.MetsMods;
 @Log4j2
 public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
 
+    private static final long serialVersionUID = 3915190112293742581L;
     @Getter
     private String title = "intranda_workflow_import_json";
     private long lastPush = System.currentTimeMillis();
     @Getter
-    private List<ImportMetadata> importMetadata;
-    private List<ImportGroupSet> importGroupSets;
-    private List<ImportChildDocStruct> importChildDocStructs;
+    private transient List<ImportMetadata> importMetadata;
+    private transient List<ImportGroupSet> importGroupSets;
+    private transient List<ImportChildDocStruct> importChildDocStructs;
     private PushContext pusher;
     @Getter
     private boolean run = false;
@@ -84,7 +86,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     @Getter
     int itemsTotal = 0;
     @Getter
-    private Queue<LogMessage> logQueue = new CircularFifoQueue<>(48);
+    private transient Queue<LogMessage> logQueue = new CircularFifoQueue<>(48);
     // folder used to hold the downloaded images temporarily
     private String importFolder;
     // workflow template that is to be used
@@ -99,7 +101,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
 
     private HierarchicalConfiguration partnerUrlConfig;
 
-    private StorageProviderInterface storageProvider = StorageProvider.getInstance();
+    private transient StorageProviderInterface storageProvider = StorageProvider.getInstance();
 
     @Override
     public PluginType getType() {
@@ -125,8 +127,8 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
      * private method to read main configuration file
      */
     private void readConfiguration() {
-    	updateLog("Start reading the configuration");
-    	
+        updateLog("Start reading the configuration");
+
         XMLConfiguration config = ConfigPlugins.getPluginConfig(title);
 
         // read some main configuration
@@ -135,9 +137,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         publicationType = config.getString("publicationType");
         jsonFolder = config.getString("jsonFolder");
         String[] downloadableUrls = config.getStringArray("downloadableUrl");
-        for (String url : downloadableUrls) {
-            downloadableUrlSet.add(url);
-        }
+        Collections.addAll(downloadableUrlSet, downloadableUrls);
         // configuration block for partner url
         partnerUrlConfig = config.configurationAt("partnerUrl");
 
@@ -150,7 +150,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             boolean person = node.getBoolean("[@person]", false);
             importMetadata.add(new ImportMetadata(source, target, person));
         }
-        
+
         // initialize importGroupSets
         importGroupSets = new ArrayList<>();
         List<HierarchicalConfiguration> groupMappings = config.configurationsAt("group");
@@ -211,14 +211,14 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     public void startImport() {
         progress = 0;
         BeanHelper bhelp = new BeanHelper();
-        
+
         // run the import in a separate thread to allow a dynamic progress bar
         run = true;
         Runnable runnable = () -> {
-            
+
             // read input file
             try {
-            	updateLog("Run through all import files");
+                updateLog("Run through all import files");
                 int start = 0;
 
                 List<Path> jsonFiles = storageProvider.listFiles(jsonFolder);
@@ -226,7 +226,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
 
                 itemsTotal = end - start;
                 itemCurrent = start;
-                
+
                 // run through import files (e.g. from importFolder)
                 for (Path jsonFile : jsonFiles) {
                     Thread.sleep(100);
@@ -241,22 +241,21 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                     JSONObject jsonObject = getJsonObjectFromJsonFile(jsonFile);
                     if (jsonObject == null) {
                         log.debug("Failed to import from " + jsonFile);
-                        continue;
-                    }
+                    } else {
+                        // create and save the process
+                        boolean success = tryCreateAndSaveNewProcess(bhelp, processName, jsonObject);
+                        if (!success) {
+                            String message = "Error while creating a process during the import";
+                            reportError(message);
+                        }
 
-                    // create and save the process
-                    boolean success = tryCreateAndSaveNewProcess(bhelp, processName, jsonObject);
-                    if (!success) {
-                        String message = "Error while creating a process during the import";
-                        reportError(message);
+                        // recalculate progress
+                        itemCurrent++;
+                        progress = 100 * itemCurrent / itemsTotal;
+                        updateLog("Processing of record done.");
                     }
-
-                    // recalculate progress
-                    itemCurrent++;
-                    progress = 100 * itemCurrent / itemsTotal;
-                    updateLog("Processing of record done.");
                 }
-                
+
                 // finally last push
                 run = false;
                 Thread.sleep(2000);
@@ -275,7 +274,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     public void setPushContext(PushContext pusher) {
         this.pusher = pusher;
     }
-	
+
     /**
      * create the title for the new process
      * 
@@ -297,7 +296,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
 
         return processName;
     }
-    
+
     /**
      * get JSONObject of the input JSON file
      * 
@@ -389,14 +388,9 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
 
             // prepare source folder for this process to hold the downloaded images
             Path sourceFolder = Path.of(importFolder, processName);
-            try {
-                storageProvider.createDirectories(sourceFolder);
-            } catch (IOException e) {
-                String message = "failed to create directories: " + sourceFolder;
-                reportError(message);
-            }
+            createFolder(sourceFolder);
 
-            // create metadata fields 
+            // create metadata fields
             createMetadataFields(prefs, logical, sourceFolder, jsonObject, this.importMetadata);
 
             // create metadata for partner url
@@ -414,6 +408,15 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             String message = "Error while preparing the Fileformat for the new process: " + e.getMessage();
             reportError(message);
             return null;
+        }
+    }
+
+    private void createFolder(Path sourceFolder) {
+        try {
+            storageProvider.createDirectories(sourceFolder);
+        } catch (IOException e) {
+            String message = "failed to create directories: " + sourceFolder;
+            reportError(message);
         }
     }
 
@@ -481,7 +484,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     private void startOpenAutomaticTasks(Process process) {
         // start any open automatic tasks for the created process
         for (Step s : process.getSchritteList()) {
-            if (s.getBearbeitungsstatusEnum().equals(StepStatus.OPEN) && s.isTypAutomatisch()) {
+            if (StepStatus.OPEN.equals(s.getBearbeitungsstatusEnum()) && s.isTypAutomatisch()) {
                 ScriptThreadWithoutHibernate myThread = new ScriptThreadWithoutHibernate(s);
                 myThread.startOrPutToQueue();
             }
@@ -854,7 +857,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             String filteringMethod = struct.getFilteringMethod();
 
             List<ImportMetadata> childImportMetadata = struct.getElements();
-            
+
             JSONObject tempObject = getDirectParentOfLeafObject(structSource, jsonObject);
             String arrayName = structSource.substring(structSource.lastIndexOf(".") + 1);
             log.debug("arrayName = " + arrayName);
@@ -869,7 +872,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 JSONObject elementObject = elementsArray.getJSONObject(k);
                 boolean addThisStruct = isFilteringLogicPassed(elementObject, filteringKey, filteringValue, filteringMethod);
                 if (!addThisStruct) {
-                    String message = "The configured filtering logic did not pass, child No." + String.valueOf(k + 1) + " will not be created.";
+                    String message = "The configured filtering logic did not pass, child No." + (k + 1) + " will not be created.";
                     updateLog(message);
                     continue;
                 }
@@ -910,7 +913,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         }
         // the key is the tailing part of source after the last dot
         String key = source.substring(source.lastIndexOf(".") + 1);
-        
+
         return getValuesFromJsonObject(key, tempObject);
     }
 
@@ -961,10 +964,9 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             // it is not an array
             String result = String.valueOf(jsonObject.get(filteredKey));
             // filter out null values
-            if (StringUtils.isNotBlank(result) && !"null".equals(result.toLowerCase())) {
+            if (StringUtils.isNotBlank(result) && !"null".equalsIgnoreCase(result)) {
                 results.add(result);
             }
-            //            results.add(String.valueOf(jsonObject.get(filteredKey)));
             return results;
         }
 
@@ -1030,6 +1032,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         private String target;
         private boolean person;
 
+        @Override
         public String toString() {
             return source + " -> " + target;
         }
