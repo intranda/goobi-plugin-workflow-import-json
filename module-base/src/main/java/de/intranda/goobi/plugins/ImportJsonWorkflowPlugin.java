@@ -148,7 +148,8 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             String source = node.getString("[@source]", "-");
             String target = node.getString("[@target]", "-");
             boolean person = node.getBoolean("[@person]", false);
-            importMetadata.add(new ImportMetadata(source, target, person));
+            String splitChar = node.getString("[@split]", null);
+            importMetadata.add(new ImportMetadata(source, target, person, splitChar));
         }
 
         // initialize importGroupSets
@@ -168,7 +169,8 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 String elementSource = node.getString("[@source]", "-");
                 String elementTarget = node.getString("[@target]", "-");
                 boolean person = node.getBoolean("[@person]", false);
-                groupSet.addElement(new ImportMetadata(elementSource, elementTarget, person));
+                String splitChar = node.getString("[@split]", null);
+                groupSet.addElement(new ImportMetadata(elementSource, elementTarget, person, splitChar));
             }
             importGroupSets.add(groupSet);
         }
@@ -189,7 +191,8 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                 String elementSource = node.getString("[@source]", "-");
                 String elementTarget = node.getString("[@target]", "-");
                 boolean person = node.getBoolean("[@person]", false);
-                childStruct.addElement(new ImportMetadata(elementSource, elementTarget, person));
+                String splitChar = node.getString("[@split]", null);
+                childStruct.addElement(new ImportMetadata(elementSource, elementTarget, person, splitChar));
             }
             importChildDocStructs.add(childStruct);
         }
@@ -504,7 +507,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         for (ImportMetadata importSet : importSets) {
             // retrieve the value from the configured jsonPath
             String source = importSet.getSource();
-            List<String> values = getValuesFromSource(source, jsonObject);
+            List<String> values = getValuesFromSource(source, jsonObject, importSet.getSplitCharacter());
 
             // prepare the MetadataType
             String target = importSet.getTarget();
@@ -598,7 +601,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             sb.append("/");
         }
         for (String urlPart : urlParts) {
-            List<String> values = getValuesFromSource(urlPart, jsonObject);
+            List<String> values = getValuesFromSource(urlPart, jsonObject, null);
             for (String value : values) {
                 sb.append(value);
                 if (!value.endsWith("/")) {
@@ -757,7 +760,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                     log.debug("elementSource = " + elementSource);
                     log.debug("elementTypeName = " + elementTypeName);
                     MetadataType elementType = prefs.getMetadataTypeByName(elementTypeName);
-                    List<String> values = getValuesFromJsonObject(elementSource, elementObject);
+                    List<String> values = getValuesFromJsonObject(elementSource, elementObject, element.getSplitCharacter());
                     for (String value : values) {
                         // for every value create a Metadata of that value
                         log.debug("value = " + value);
@@ -897,7 +900,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
      * @param jsonObject
      * @return list of string values
      */
-    private List<String> getValuesFromSource(String source, JSONObject jsonObject) {
+    private List<String> getValuesFromSource(String source, JSONObject jsonObject, String splitChar) {
         List<String> results = new ArrayList<>();
         // for source paths indicating jsonPaths, it should start with $. or with @.
         if (!source.startsWith("$") && !source.startsWith("@")) {
@@ -914,7 +917,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         // the key is the tailing part of source after the last dot
         String key = source.substring(source.lastIndexOf(".") + 1);
 
-        return getValuesFromJsonObject(key, tempObject);
+        return getValuesFromJsonObject(key, tempObject, splitChar);
     }
 
     /**
@@ -947,7 +950,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
      * @param jsonObject
      * @return list of string values
      */
-    private List<String> getValuesFromJsonObject(String key, JSONObject jsonObject) {
+    private List<String> getValuesFromJsonObject(String key, JSONObject jsonObject, String splitChar) {
         // suppose from now on our jsonObject is the one that is the direct parent of some leaf nodes
         // i.e. source will not start with $
         // if it is not starting with @ then it is just a value of the jsonObject
@@ -965,7 +968,12 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             String result = String.valueOf(jsonObject.get(filteredKey));
             // filter out null values
             if (StringUtils.isNotBlank(result) && !"null".equalsIgnoreCase(result)) {
-                results.add(result);
+                if (StringUtils.isNotBlank(splitChar)) {
+                    String[] parts = result.split(splitChar);
+                    Collections.addAll(results, parts);
+                } else {
+                    results.add(result);
+                }
             }
             return results;
         }
@@ -984,7 +992,12 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         for (int i = 0; i < jsonArray.length(); ++i) {
             String value = jsonArray.getString(i);
             log.debug("value in jsonArray = " + value);
-            results.add(value);
+            if (StringUtils.isNotBlank(splitChar)) {
+                String[] parts = value.split(splitChar);
+                Collections.addAll(results, parts);
+            } else {
+                results.add(value);
+            }
         }
 
         return results;
@@ -1031,6 +1044,8 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         private String source;
         private String target;
         private boolean person;
+
+        private String splitCharacter;
 
         @Override
         public String toString() {
