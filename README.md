@@ -15,8 +15,8 @@ Detail                      | Description
 **Plugin identifier**       | intranda_workflow_import_json
 **Plugin type**             | workflow
 **Licence**                 | GPL 2.0 or newer
-**Documentation (German)**  | https://docs.goobi.io/workflow-plugins/v/eng/workflow/goobi-plugin-workflow-import-json
-**Documentation (English)** | https://docs.goobi.io/workflow-plugins/v/ger/workflow/goobi-plugin-workflow-import-json
+**Documentation (German)**  | https://docs.goobi.io/workflow-plugins/v/ger/workflow/goobi-plugin-workflow-import-json
+**Documentation (English)** | https://docs.goobi.io/workflow-plugins/v/eng/workflow/goobi-plugin-workflow-import-json
 
 ## Goobi details
 
