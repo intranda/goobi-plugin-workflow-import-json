@@ -103,6 +103,8 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
 
     private transient StorageProviderInterface storageProvider = StorageProvider.getInstance();
 
+    private Prefs prefs;
+
     @Override
     public PluginType getType() {
         return PluginType.Workflow;
@@ -371,7 +373,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
      * @return Fileformat
      */
     private Fileformat prepareFileformatForNewProcess(Process template, String processName, JSONObject jsonObject) {
-        Prefs prefs = template.getRegelsatz().getPreferences();
+        prefs = template.getRegelsatz().getPreferences();
         try {
             Fileformat fileformat = new MetsMods(prefs);
             DigitalDocument dd = new DigitalDocument();
@@ -394,16 +396,16 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             createFolder(sourceFolder);
 
             // create metadata fields
-            createMetadataFields(prefs, logical, sourceFolder, jsonObject, this.importMetadata);
+            createMetadataFields(logical, sourceFolder, jsonObject, this.importMetadata, dd);
 
             // create metadata for partner url
-            createMetadataPartnerUrl(prefs, logical, sourceFolder, jsonObject);
+            createMetadataPartnerUrl(logical, sourceFolder, jsonObject, dd);
 
             // create MetadataGroups
-            createMetadataGroups(prefs, logical, sourceFolder, jsonObject);
+            createMetadataGroups(logical, sourceFolder, jsonObject, dd);
 
             // create children DocStructs
-            createChildDocStructs(prefs, logical, sourceFolder, jsonObject, dd);
+            createChildDocStructs(logical, sourceFolder, jsonObject, dd);
 
             return fileformat;
 
@@ -497,13 +499,13 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     /**
      * create all metadata fields
      * 
-     * @param prefs Prefs
      * @param ds DocStruct
      * @param sourceFolder path to the folder that is used to hold the downloaded images
      * @param jsonObject
      * @param importSets list of ImportMetadata
      */
-    private void createMetadataFields(Prefs prefs, DocStruct ds, Path sourceFolder, JSONObject jsonObject, List<ImportMetadata> importSets) {
+    private void createMetadataFields(DocStruct ds, Path sourceFolder, JSONObject jsonObject, List<ImportMetadata> importSets,
+            DigitalDocument dd) {
         for (ImportMetadata importSet : importSets) {
             // retrieve the value from the configured jsonPath
             String source = importSet.getSource();
@@ -519,7 +521,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
 
             for (String value : values) {
                 try {
-                    Metadata md = createMetadata(targetType, value, isPerson, isDownloadableUrl, sourceFolder);
+                    Metadata md = createMetadata(targetType, value, isPerson, isDownloadableUrl, sourceFolder, dd, ds);
                     if (isPerson) {
                         updateLog("Add person '" + target + "' with value '" + value + "'");
                         ds.addPerson((Person) md);
@@ -540,12 +542,11 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     /**
      * create the metadata specifically for the configured partner url
      * 
-     * @param prefs Prefs
      * @param ds DocStruct
      * @param sourceFolder path to the folder that is used to hold the downloaded images
      * @param jsonObject
      */
-    private void createMetadataPartnerUrl(Prefs prefs, DocStruct ds, Path sourceFolder, JSONObject jsonObject) {
+    private void createMetadataPartnerUrl(DocStruct ds, Path sourceFolder, JSONObject jsonObject, DigitalDocument dd) {
         String partnerUrl = getPartnerUrl(partnerUrlConfig, jsonObject);
         log.debug("partnerUrl = " + partnerUrl);
         String partnerUrlType = partnerUrlConfig.getString("urlMetadata");
@@ -557,7 +558,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         MetadataType urlType = prefs.getMetadataTypeByName(partnerUrlType);
         try {
             // we don't want to download from this url, hence the second false
-            Metadata md = createMetadata(urlType, partnerUrl, false, false, sourceFolder);
+            Metadata md = createMetadata(urlType, partnerUrl, false, false, sourceFolder, dd, ds);
             updateLog("Add metadata '" + partnerUrlType + "' with value '" + partnerUrl + "'");
             ds.addMetadata(md);
         } catch (MetadataTypeNotAllowedException e) {
@@ -631,7 +632,8 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
      * @return the new Metadata object created
      * @throws MetadataTypeNotAllowedException
      */
-    private Metadata createMetadata(MetadataType targetType, String value, boolean isPerson, boolean isDownloadableUrl, Path sourceFolder)
+    private Metadata createMetadata(MetadataType targetType, String value, boolean isPerson, boolean isDownloadableUrl, Path sourceFolder,
+            DigitalDocument dd, DocStruct ds)
             throws MetadataTypeNotAllowedException {
         // treat persons different than regular metadata
         if (isPerson) {
@@ -650,7 +652,37 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
 
         if (isDownloadableUrl) {
             // download the image from the url to the sourceFolder
-            downloadImage(value, sourceFolder.toString());
+            String imageName = downloadImage(value, sourceFolder.toString());
+            if (StringUtils.isNotBlank(imageName)) {
+                // create physical object
+                int phyNumber = dd.getPhysicalDocStruct().getAllChildren().size() + 1;
+                try {
+                    DocStruct page = dd.createDocStruct(prefs.getDocStrctTypeByName("BoundBook"));
+                    dd.getPhysicalDocStruct().addChild(page);
+                    page.setImageName(imageName);
+
+                    // physical order
+                    MetadataType mdt = prefs.getMetadataTypeByName("physPageNumber");
+                    Metadata mdTemp = new Metadata(mdt);
+                    mdTemp.setValue(String.valueOf(phyNumber));
+                    page.addMetadata(mdTemp);
+
+                    // logical page no
+                    mdt = prefs.getMetadataTypeByName("logicalPageNumber");
+                    mdTemp = new Metadata(mdt);
+                    mdTemp.setValue("uncounted");
+                    page.addMetadata(mdTemp);
+
+                    // add it to current docstruct and to main element
+                    dd.getLogicalDocStruct().addReferenceTo(page, "logical_physical");
+                    if (ds != null && !ds.getType().isTopmost()) {
+                        ds.addReferenceTo(page, "logical_physical");
+                    }
+
+                } catch (TypeNotAllowedAsChildException | TypeNotAllowedForParentException e) {
+                    log.error(e);
+                }
+            }
         }
         return md;
     }
@@ -661,7 +693,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
      * @param strUrl url of the image
      * @param targetFolder targeted folder to download the image file
      */
-    private void downloadImage(String strUrl, String targetFolder) {
+    private String downloadImage(String strUrl, String targetFolder) {
         log.debug("downloading image from url: " + strUrl);
         // check url
         URL url = null;
@@ -670,7 +702,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         } catch (MalformedURLException e) {
             String message = "the input URL is malformed: " + strUrl;
             reportError(message);
-            return;
+            return null;
         }
 
         // url is correctly formed, start to download
@@ -687,6 +719,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             String message = "failed to download the image from " + strUrl;
             reportError(message);
         }
+        return imageName;
     }
 
     /**
@@ -708,13 +741,13 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     /**
      * create MetadataGroups
      * 
-     * @param prefs Prefs
      * @param ds DocStruct
      * @param sourceFolder path to the folder that is used to hold the downloaded images
      * @param jsonObject
      * @throws MetadataTypeNotAllowedException
      */
-    private void createMetadataGroups(Prefs prefs, DocStruct ds, Path sourceFolder, JSONObject jsonObject) throws MetadataTypeNotAllowedException {
+    private void createMetadataGroups(DocStruct ds, Path sourceFolder, JSONObject jsonObject, DigitalDocument dd)
+            throws MetadataTypeNotAllowedException {
         log.debug("creating metadata groups");
         for (ImportGroupSet group : importGroupSets) {
             String groupSource = group.getSource();
@@ -732,7 +765,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
 
             //prepare metadata group type and an alternative type
             MetadataGroupType groupType = prefs.getMetadataGroupTypeByName(type);
-            MetadataGroupType alternativeGroupType = getAlternativeMetadataGroupType(prefs, alternativeType);
+            MetadataGroupType alternativeGroupType = getAlternativeMetadataGroupType(alternativeType);
 
             JSONObject tempObject = getDirectParentOfLeafObject(groupSource, jsonObject);
             String arrayName = groupSource.substring(groupSource.lastIndexOf(".") + 1);
@@ -764,7 +797,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                     for (String value : values) {
                         // for every value create a Metadata of that value
                         log.debug("value = " + value);
-                        Metadata md = createMetadata(elementType, value, false, false, sourceFolder);
+                        Metadata md = createMetadata(elementType, value, false, false, sourceFolder, dd, ds);
                         mdGroup.addMetadata(md);
                     }
                 }
@@ -776,11 +809,10 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     /**
      * get the alternative MetadataGroupType
      * 
-     * @param prefs Prefs
      * @param alternativeType name of the alternative MetadataGroupType
      * @return the MetadataGroupType if it is found, otherwise null
      */
-    private MetadataGroupType getAlternativeMetadataGroupType(Prefs prefs, String alternativeType) {
+    private MetadataGroupType getAlternativeMetadataGroupType(String alternativeType) {
         MetadataGroupType type = null;
         try {
             type = prefs.getMetadataGroupTypeByName(alternativeType);
@@ -839,13 +871,12 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
     /**
      * create all children DocStructs
      * 
-     * @param prefs Prefs
      * @param ds DocStruct
      * @param sourceFolder path to the folder that is used to hold the downloaded images
      * @param jsonObject
      * @param dd DigitalDocument
      */
-    private void createChildDocStructs(Prefs prefs, DocStruct ds, Path sourceFolder, JSONObject jsonObject, DigitalDocument dd) {
+    private void createChildDocStructs(DocStruct ds, Path sourceFolder, JSONObject jsonObject, DigitalDocument dd) {
         log.debug("creating children DocStructs");
         log.debug("importChildDocStructs has length = " + importChildDocStructs.size());
         for (ImportChildDocStruct struct : importChildDocStructs) {
@@ -883,14 +914,17 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
                     DocStruct childStruct = dd.createDocStruct(prefs.getDocStrctTypeByName(structType));
                     log.debug("childStruct has type = " + childStruct.getType());
                     ds.addChild(childStruct);
+
                     // create metadata fields to the child DocStruct
-                    createMetadataFields(prefs, childStruct, sourceFolder, elementObject, childImportMetadata);
+                    createMetadataFields(childStruct, sourceFolder, elementObject, childImportMetadata, dd);
+
                 } catch (TypeNotAllowedForParentException | TypeNotAllowedAsChildException e) {
                     String message = "Error while trying to create children DocStructs";
                     reportError(message);
                 }
             }
         }
+
     }
 
     /**
