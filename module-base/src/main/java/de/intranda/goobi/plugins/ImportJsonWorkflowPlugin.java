@@ -5,6 +5,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
@@ -19,9 +21,9 @@ import java.util.Set;
 import java.util.UUID;
 
 import org.apache.commons.collections4.queue.CircularFifoQueue;
-import org.apache.commons.compress.utils.IOUtils;
 import org.apache.commons.configuration.HierarchicalConfiguration;
 import org.apache.commons.configuration.XMLConfiguration;
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.goobi.beans.Process;
 import org.goobi.beans.Step;
@@ -655,9 +657,9 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             String imageName = downloadImage(value, sourceFolder.toString());
             if (StringUtils.isNotBlank(imageName)) {
                 // create physical object
-                int phyNumber = dd.getPhysicalDocStruct().getAllChildren().size() + 1;
+                int phyNumber = dd.getPhysicalDocStruct().getAllChildren() == null ? 0 : dd.getPhysicalDocStruct().getAllChildren().size() + 1;
                 try {
-                    DocStruct page = dd.createDocStruct(prefs.getDocStrctTypeByName("BoundBook"));
+                    DocStruct page = dd.createDocStruct(prefs.getDocStrctTypeByName("page"));
                     dd.getPhysicalDocStruct().addChild(page);
                     page.setImageName(imageName);
 
@@ -698,8 +700,8 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
         // check url
         URL url = null;
         try {
-            url = new URL(strUrl);
-        } catch (MalformedURLException e) {
+            url = new URI(strUrl).toURL();
+        } catch (MalformedURLException | URISyntaxException e) {
             String message = "the input URL is malformed: " + strUrl;
             reportError(message);
             return null;
@@ -772,7 +774,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             log.debug("arrayName = " + arrayName);
             // check existence of key
             if (!tempObject.has(arrayName)) {
-                return;
+                continue;
             }
             JSONArray elementsArray = tempObject.getJSONArray(arrayName);
             // every JSONObject of this JSONArray should become a metadata group
