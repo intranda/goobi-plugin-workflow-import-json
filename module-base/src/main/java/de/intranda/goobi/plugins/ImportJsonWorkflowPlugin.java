@@ -657,7 +657,7 @@ public class ImportJsonWorkflowPlugin implements IWorkflowPlugin, IPushPlugin {
             String imageName = downloadImage(value, sourceFolder.toString());
             if (StringUtils.isNotBlank(imageName)) {
                 // create physical object
-                int phyNumber = dd.getPhysicalDocStruct().getAllChildren() == null ? 0 : dd.getPhysicalDocStruct().getAllChildren().size() + 1;
+                int phyNumber = dd.getPhysicalDocStruct().getAllChildren() == null ? 1 : dd.getPhysicalDocStruct().getAllChildren().size() + 1;
                 try {
                     DocStruct page = dd.createDocStruct(prefs.getDocStrctTypeByName("page"));
                     dd.getPhysicalDocStruct().addChild(page);
