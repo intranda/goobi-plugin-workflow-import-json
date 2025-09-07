@@ -3,6 +3,10 @@ title: Generic import plugin for JSON files
 identifier: intranda_workflow_import_json
 description: This generic import plugin allows the bulk import of data from JSON files
 published: true
+keywords:
+    - Goobi workflow
+    - Plugin
+    - Workflow Plugin
 ---
 ## Introduction
 This is the technical documentation for the workflow plugin for Goobi workflow, which is used to read metadata from multiple JSON files and create processes based on it.
