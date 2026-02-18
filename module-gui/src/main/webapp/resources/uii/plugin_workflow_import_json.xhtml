@@ -9,7 +9,8 @@
 	xmlns:o="http://omnifaces.org/ui"
 	xmlns:p="http://primefaces.org/ui"
 	xmlns:jsf="http://xmlns.jcp.org/jsf"
-    xmlns:section="http://goobi.io/section">
+    xmlns:section="http://goobi.io/section"
+    xmlns:util="http://goobi.io/util">
 
     <composite:interface>
     </composite:interface>
@@ -46,6 +47,12 @@
                 display: block;
                 margin-top: 20px;
                 padding: 5px;
+            }
+            .feed-item-icon .icon-wrapper {
+                color: var(--clr-neutral-400);
+            }
+            .feed-item {
+                align-items: center;
             }
         </style>
         <h:panelGroup
@@ -89,11 +96,9 @@
                             title="#{msgs.plugin_intranda_workflow_startImportTitle}">
                             <button
                                 type="button"
-                                class="btn btn-action dropdown-toggle" data-bs-toggle="dropdown">
-                                <span class="fa fa-play-circle" aria-hidden="true" />
-                                <span>
-                                    #{msgs.plugin_intranda_workflow_startImport}
-                                </span>
+                                class="btn btn-action dropdown-toggle d-inline-flex align-items-center gap-2"
+                                data-bs-toggle="dropdown">
+                                <util:icon-text icon="player-play" text="#{msgs.plugin_intranda_workflow_startImport}" />
                             </button>
 
                             <ul class="dropdown-menu">
@@ -133,16 +138,16 @@
                             <li class="feed-item">
                                 <span class="feed-item-icon fs-600">
                                     <ui:fragment rendered="#{log.level eq 0}">
-                                        <span class="fa fa-desktop" aria-hidden="true" />
+                                        <util:icon icon="device-desktop" />
                                     </ui:fragment>
                                     <ui:fragment rendered="#{log.level eq 1}">
-                                        <span class="fa fa-info-circle" aria-hidden="true" />
+                                        <util:icon icon="info-circle" />
                                     </ui:fragment>
                                     <ui:fragment rendered="#{log.level eq 2}">
-                                        <span class="fa fa-exclamation-circle" aria-hidden="true" />
+                                        <util:icon icon="alert-circle" />
                                     </ui:fragment>
                                     <ui:fragment rendered="#{log.level eq 3}">
-                                        <span class="text-danger fa fa-exclamation-triangle" aria-hidden="true" />
+                                        <util:icon icon="alert-triangle" styleClass="icon--danger" />
                                     </ui:fragment>
                                     <span class="
                                         filler filler-vertical
