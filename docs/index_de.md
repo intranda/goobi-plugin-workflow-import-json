@@ -9,7 +9,7 @@ keywords:
     - Workflow Plugin
 ---
 ## Einführung
-Dieses dies die technische Dokumentation für das Workflow-Plugin für Goobi workflow, das dazu dient, Metadaten aus mehreren JSON-Dateien auszulesen und darauf Vorgänge zu erstellen.
+Dies ist die technische Dokumentation für das Workflow-Plugin für Goobi workflow, das dazu dient, Metadaten aus mehreren JSON-Dateien auszulesen und darauf Vorgänge zu erstellen.
 
 
 ## Installation
@@ -115,7 +115,7 @@ Die Konfiguration des Plugins gestaltet sich wie folgt:
 | :--- | :--- |
 | `jsonFolder` | Pfad zum Verzeichnis, wo sich die JSON-Dateien befinden. |
 | `importFolder` | Pfad zum Verzeichnis, wo die herunterzuladenden Bilder gespeichert werden sollen, bevor sie in die Vorgänge importiert werden. |
-| `workflow` | Name des Produktionsvorlage, die verwendet werden soll. |
+| `workflow` | Name der Produktionsvorlage, die verwendet werden soll. |
 | `publicationType` | Publikationstyp für die anzulegenden Vorgänge. |
 | `downloadableUrl` | Typs des Metadatums, in dem die URL angegeben ist, von der die Bilder herunterzuladen sind. Dieser Wert ist wiederholbar. |
 | `metadata` | Aus jedem Tag wird ein Metadata-Objekt erzeugt. Das Attribut `@source` bezieht sich auf einen JSON-Pfad, wenn dieser mit `$` beginnt. Aus diesem Pfad wird der Wert des Metadatums ausgelesen. In diesem Falle bezieht sich das Attribut auf eine Liste, wenn es außerdem mit `[:]` endet. Wenn es weder mit `$` noch mit `@` startet, wird es hingeben selbst als Wert des Metadatums verwendet. Das Attribut `@target` konfiguriert den Namen des Metadatentyps. |
