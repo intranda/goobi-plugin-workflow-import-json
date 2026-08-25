@@ -55,12 +55,7 @@
                 align-items: center;
             }
         </style>
-        <h:panelGroup
-            rendered="#{!LoginForm.hasRole('Plugin_workflow_import_json')}"
-            layout="block"
-            styleClass="alert alert-danger">
-                #{msgs.plugin_administration_missingPermission} Plugin_workflow_import_json
-        </h:panelGroup>
+        <util:missing-rights rights="Plugin_workflow_import_json" />
         <h:panelGroup
             rendered="#{LoginForm.hasRole('Plugin_workflow_import_json')}"
             layout="block"
