@@ -1,6 +1,9 @@
 # Goobi workflow Plugin: goobi-plugin-workflow-import-json
 
-<img src="https://goobi.io/wp-content/uploads/logo_goobi_plugin.png" align="right" style="margin:0 0 20px 20px;" alt="Plugin for Goobi workflow" width="175" height="109">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://goobi.io/logo_goobi_workflow_dark.png">
+  <img src="https://goobi.io/logo_goobi_workflow.png" align="right" alt="Plugin for Goobi workflow" width="240" height="132" hspace="20" vspace="10">
+</picture>
 
 This Workflow plugin for Goobi workflow was developed for the KHM in Vienna and allows to do an import of metadata from JSON files to let Goobi processes be created. Its configuration is very generic and can be customized in detail to fit to other use cases. However adaptions might be needed for for other projects.
 
